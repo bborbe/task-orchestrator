@@ -2,6 +2,7 @@
 
 import logging
 import re
+from contextlib import suppress
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
@@ -111,10 +112,8 @@ class ObsidianTaskReader:
         planned_date = self._date_to_string(frontmatter.get("planned_date"))
         due_date = self._date_to_string(frontmatter.get("due_date"))
 
-        # Get priority (optional, 1-3)
-        priority = frontmatter.get("priority")
-        if priority is not None:
-            priority = int(priority)
+        # Get priority (optional, 1-3 or string like "medium", "high")
+        priority = self._normalize_priority(frontmatter.get("priority"))
 
         # Get category (optional)
         category = frontmatter.get("category")
@@ -142,6 +141,40 @@ class ObsidianTaskReader:
             category=category,
             recurring=recurring,
         )
+
+    def _normalize_priority(self, value: Any) -> int | str | None:
+        """Normalize priority to int or string.
+
+        Accepts:
+        - int: Passed through
+        - str (numeric): Converted to int
+        - str (non-numeric): Passed through (e.g., "medium", "high")
+        - None: Passed through
+
+        Rejects (returns None):
+        - bool: Rejected (booleans are subclass of int, need explicit check)
+        - float: Rejected (not a valid priority format)
+        - Empty strings: Rejected
+        - Other types: Rejected
+        """
+        if value is None:
+            return None
+        # Check bool before int (bool is subclass of int in Python)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            # Reject empty/whitespace-only strings
+            if not value.strip():
+                return None
+            # Try to convert numeric strings to int
+            with suppress(ValueError):
+                return int(value)
+            # Keep non-numeric strings (medium, high, etc.)
+            return value
+        # Reject floats and other unexpected types
+        return None
 
     def _date_to_string(self, value: Any) -> str | None:
         """Convert date object to ISO string or return None."""

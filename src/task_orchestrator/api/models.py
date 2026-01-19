@@ -20,7 +20,7 @@ class Task:
     defer_date: str | None  # From frontmatter: YYYY-MM-DD
     planned_date: str | None  # From frontmatter: YYYY-MM-DD
     due_date: str | None  # From frontmatter: YYYY-MM-DD
-    priority: int | None  # From frontmatter: 1-3
+    priority: int | str | None  # From frontmatter: 1-3 or "low"/"medium"/"high"/"highest"
     category: str | None  # From frontmatter
     recurring: str | None  # From frontmatter: daily, weekly, monthly
 
@@ -37,7 +37,7 @@ class TaskResponse(BaseModel):
     defer_date: str | None
     planned_date: str | None
     due_date: str | None
-    priority: int | None
+    priority: int | str | None
     category: str | None
     recurring: str | None
 

@@ -16,7 +16,8 @@ def main() -> int:
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s %(levelname)-8s [%(name)s:%(lineno)d] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     config = get_config()
