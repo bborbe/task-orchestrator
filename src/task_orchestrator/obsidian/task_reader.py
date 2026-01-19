@@ -3,7 +3,7 @@
 import logging
 import re
 from contextlib import suppress
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -43,7 +43,13 @@ class ObsidianTaskReader:
         if not file_path.exists():
             raise FileNotFoundError(f"Task not found: {task_id}")
 
-        content = file_path.read_text()
+        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            content = file_path.read_text(encoding="latin-1")
+            encoding = "latin-1"
 
         # Match frontmatter between --- markers
         match = re.match(r"^(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
@@ -67,8 +73,47 @@ class ObsidianTaskReader:
         # Reconstruct content
         new_content = f"---\n{new_frontmatter}---" + content[match.end() :]
 
-        # Write back
-        file_path.write_text(new_content)
+        # Write back with same encoding
+        file_path.write_text(new_content, encoding=encoding)
+
+    def update_task_session_id(self, task_id: str, session_id: str) -> None:
+        """Update the claude_session_id field in task frontmatter."""
+        file_path = self._tasks_dir / f"{task_id}.md"
+        if not file_path.exists():
+            raise FileNotFoundError(f"Task not found: {task_id}")
+
+        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            content = file_path.read_text(encoding="latin-1")
+            encoding = "latin-1"
+
+        # Match frontmatter between --- markers
+        match = re.match(r"^(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
+        if not match:
+            raise ValueError(f"Task {task_id} has no frontmatter")
+
+        frontmatter_text = match.group(2)
+
+        # Parse existing frontmatter
+        try:
+            data = yaml.safe_load(frontmatter_text) or {}
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in task {task_id}") from e
+
+        # Update claude_session_id
+        data["claude_session_id"] = session_id
+
+        # Serialize back to YAML
+        new_frontmatter = yaml.dump(data, default_flow_style=False, sort_keys=False)
+
+        # Reconstruct content
+        new_content = f"---\n{new_frontmatter}---" + content[match.end() :]
+
+        # Write back with same encoding
+        file_path.write_text(new_content, encoding=encoding)
 
     def list_tasks(self, status_filter: list[str] | None = None) -> list[Task]:
         """List all tasks from vault, optionally filtered by status."""
@@ -92,7 +137,11 @@ class ObsidianTaskReader:
 
     def _parse_task(self, file_path: Path) -> Task:
         """Parse markdown file into Task object."""
-        content = file_path.read_text()
+        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = file_path.read_text(encoding="latin-1")
 
         # Extract frontmatter
         frontmatter = self._extract_frontmatter(content)
@@ -121,11 +170,20 @@ class ObsidianTaskReader:
         # Get recurring (optional: daily, weekly, monthly)
         recurring = frontmatter.get("recurring")
 
+        # Get Claude session ID (optional)
+        claude_session_id = frontmatter.get("claude_session_id")
+
         # Use filename as title (not H1 headings which are section names)
         title = file_path.stem
 
         # Task ID is filename without extension
         task_id = file_path.stem
+
+        # Extract description (first 100 chars after frontmatter, clean text only)
+        description = self._extract_description(content)
+
+        # Get file modification time
+        modified_date = datetime.fromtimestamp(file_path.stat().st_mtime)
 
         return Task(
             id=task_id,
@@ -134,12 +192,15 @@ class ObsidianTaskReader:
             phase=phase,
             project_path=project_path,
             content=content,
+            description=description,
+            modified_date=modified_date,
             defer_date=defer_date,
             planned_date=planned_date,
             due_date=due_date,
             priority=priority,
             category=category,
             recurring=recurring,
+            claude_session_id=claude_session_id,
         )
 
     def _normalize_priority(self, value: Any) -> int | str | None:
@@ -199,3 +260,25 @@ class ObsidianTaskReader:
             return data if isinstance(data, dict) else {}
         except yaml.YAMLError:
             return {}
+
+    def _extract_description(self, content: str) -> str | None:
+        """Extract first 100 chars of content after frontmatter for description.
+
+        Removes frontmatter, markdown formatting, and extra whitespace.
+        """
+        # Remove frontmatter
+        match = re.match(r"^---\s*\n.*?\n---\s*\n", content, re.DOTALL)
+        if match:
+            content = content[match.end() :]
+
+        # Remove markdown headers, links, and extra whitespace
+        content = re.sub(r"#{1,6}\s+", "", content)  # Headers
+        content = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", content)  # Links [text](url) -> text
+        content = re.sub(r"\[\[([^\]]+)\]\]", r"\1", content)  # Wikilinks [[text]] -> text
+        content = re.sub(r"\s+", " ", content)  # Normalize whitespace
+        content = content.strip()
+
+        # Return first 100 chars or None if empty
+        if not content:
+            return None
+        return content[:100] + ("..." if len(content) > 100 else "")

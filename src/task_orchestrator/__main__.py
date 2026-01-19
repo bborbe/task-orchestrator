@@ -5,10 +5,18 @@ import sys
 
 import uvicorn
 
+from task_orchestrator.api.tasks import set_session_manager
+from task_orchestrator.claude.session_manager import SessionManager
 from task_orchestrator.factory import create_app, get_config
+
+# Create session manager
+session_manager = SessionManager()
 
 # Create app instance for uvicorn
 app = create_app()
+
+# Inject session manager into API routes
+set_session_manager(session_manager)
 
 
 def main() -> int:

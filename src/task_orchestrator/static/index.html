@@ -49,10 +49,11 @@
     <!-- Session Modal -->
     <div id="session-modal" class="modal hidden">
         <div class="modal-content">
-            <h2>Session Started</h2>
+            <h2>Session Ready</h2>
+            <p><code>/work-on-task</code> already executed. Resume to continue working.</p>
             <p><strong>Session ID:</strong> <code id="session-id"></code></p>
-            <p><strong>Handoff Command:</strong></p>
-            <code id="handoff-command"></code>
+            <p><strong>Run this command:</strong></p>
+            <code id="handoff-command" class="command-block"></code>
             <div class="modal-buttons">
                 <button id="copy-btn">Copy Command</button>
                 <button id="close-btn">Close</button>

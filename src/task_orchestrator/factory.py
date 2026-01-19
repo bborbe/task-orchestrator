@@ -1,7 +1,9 @@
 """Dependency injection factory."""
 
+from collections.abc import Callable
 from pathlib import Path
 
+from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -43,6 +45,20 @@ def get_executor() -> ClaudeExecutor:
     """Create ClaudeExecutor for dependency injection."""
     config = get_config()
     return ClaudeCodeExecutor(config.claude_cli)
+
+
+def create_claude_client_factory() -> Callable[[], ClaudeSDKClient]:
+    """Create a factory function for Claude SDK clients.
+
+    Returns a callable that creates new ClaudeSDKClient instances.
+    Each call returns a fresh client for use in async context managers.
+    """
+
+    def factory() -> ClaudeSDKClient:
+        options = ClaudeCodeOptions(permission_mode="acceptEdits")
+        return ClaudeSDKClient(options=options)
+
+    return factory
 
 
 def create_app() -> FastAPI:

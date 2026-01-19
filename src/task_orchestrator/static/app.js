@@ -1,6 +1,7 @@
 // TaskOrchestrator Kanban Board
 
 let currentVault = null;
+let tasksCache = {}; // Map of task ID -> task data
 
 // Load tasks on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -129,6 +130,12 @@ async function loadTasks() {
 
         const tasks = await response.json();
 
+        // Cache tasks for quick lookup
+        tasksCache = {};
+        tasks.forEach(task => {
+            tasksCache[task.id] = task;
+        });
+
         // Clear existing cards
         ['todo', 'planning', 'in_progress', 'ai_review', 'human_review', 'done'].forEach(phase => {
             const container = document.getElementById(`cards-${phase}`);
@@ -172,24 +179,45 @@ function createTaskCard(task) {
         card.classList.remove('dragging');
     });
 
-    // Build card HTML
-    const projectBadge = task.project_path
-        ? `<div class="project-badge">${task.project_path}</div>`
-        : '<div class="project-badge">No project</div>';
-
-    const runButton = task.project_path
-        ? `<button onclick="runTask('${task.id}')">▶ Run</button>`
+    // Build card HTML with new layout
+    const description = task.description
+        ? `<div class="task-description">${escapeHtml(task.description)}</div>`
         : '';
 
+    const phaseBadge = task.phase
+        ? `<div class="task-badge">${formatPhase(task.phase)}</div>`
+        : '';
+
+    const timestamp = task.modified_date
+        ? `<span class="task-timestamp">🕐 ${formatRelativeTime(task.modified_date)}</span>`
+        : '';
+
+    // Show Resume button if session exists, otherwise Start
+    const hasSession = task.claude_session_id;
+    const buttonLabel = hasSession ? '▶ Resume' : '▶ Start';
+    const buttonClass = hasSession ? 'resume-btn' : 'start-btn';
+    const startButton = `<button class="${buttonClass}" onclick="runTask('${task.id}')">${buttonLabel}</button>`;
+
+    const menuButton = '<button class="menu-btn" onclick="showTaskMenu(event, \'' + task.id + '\')">⋮</button>';
+
     card.innerHTML = `
-        <div class="task-header">
-            <h3>${escapeHtml(task.title)}</h3>
-            <a href="${task.obsidian_url}" class="obsidian-link" title="Open in Obsidian">
-                📝
-            </a>
+        <div class="card-content">
+            <div class="task-header">
+                <h3>${escapeHtml(task.title)}</h3>
+                <a href="${task.obsidian_url}" class="obsidian-link" title="Open in Obsidian">
+                    📝
+                </a>
+            </div>
+            ${description}
+            ${phaseBadge}
         </div>
-        ${projectBadge}
-        ${runButton}
+        <div class="card-footer">
+            ${timestamp}
+            <div class="card-actions">
+                ${startButton}
+                ${menuButton}
+            </div>
+        </div>
     `;
 
     return card;
@@ -201,14 +229,42 @@ async function runTask(taskId) {
         return;
     }
 
+    // Look up task from cache
+    const task = tasksCache[taskId];
+    if (!task) {
+        alert('Task not found in cache');
+        return;
+    }
+
     try {
         // Show loading state
         const button = event.target;
         const originalText = button.textContent;
-        button.textContent = '⏳ Starting...';
+        button.textContent = '⏳ Loading...';
         button.disabled = true;
 
-        // Start Claude session
+        // If task already has a session, show resume modal directly
+        if (task.claude_session_id) {
+            // Get vault config to build command
+            const vaultsResponse = await fetch('/api/vaults');
+            const vaults = await vaultsResponse.json();
+            const vaultConfig = vaults.find(v => v.name === currentVault);
+
+            if (!vaultConfig) {
+                throw new Error('Vault not found');
+            }
+
+            const command = `cd ${vaultConfig.vault_path} && claude --resume ${task.claude_session_id}`;
+            showModal(task.claude_session_id, command, vaultConfig.vault_path);
+
+            // Restore button
+            button.textContent = originalText;
+            button.disabled = false;
+            return;
+        }
+
+        // Create new Claude session
+        button.textContent = '⏳ Starting...';
         const response = await fetch(`/api/tasks/${taskId}/run?vault=${encodeURIComponent(currentVault)}`, {
             method: 'POST'
         });
@@ -220,11 +276,15 @@ async function runTask(taskId) {
 
         const data = await response.json();
 
-        // Show session modal
-        showModal(data.session_id, data.handoff_command);
+        // Update task cache with new session_id
+        task.claude_session_id = data.session_id;
 
-        // Restore button
-        button.textContent = originalText;
+        // Show session modal with command
+        showModal(data.session_id, data.command, data.working_dir);
+
+        // Restore button and update to Resume
+        button.textContent = '▶ Resume';
+        button.className = 'resume-btn';
         button.disabled = false;
 
     } catch (error) {
@@ -233,13 +293,13 @@ async function runTask(taskId) {
 
         // Restore button
         if (event && event.target) {
-            event.target.textContent = '▶ Run';
+            event.target.textContent = '▶ Start';
             event.target.disabled = false;
         }
     }
 }
 
-function showModal(sessionId, command) {
+function showModal(sessionId, command, workingDir) {
     document.getElementById('session-id').textContent = sessionId;
     document.getElementById('handoff-command').textContent = command;
     document.getElementById('session-modal').classList.remove('hidden');
@@ -273,4 +333,44 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function formatPhase(phase) {
+    const phaseNames = {
+        'todo': 'Todo',
+        'planning': 'Planning',
+        'in_progress': 'In Progress',
+        'ai_review': 'AI Review',
+        'human_review': 'Human Review',
+        'done': 'Done'
+    };
+    return phaseNames[phase] || phase;
+}
+
+function formatRelativeTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) {
+        return 'just now';
+    } else if (diffMins < 60) {
+        return `${diffMins}m ago`;
+    } else if (diffHours < 24) {
+        return `${diffHours}h ago`;
+    } else if (diffDays < 7) {
+        return `${diffDays}d ago`;
+    } else {
+        return date.toLocaleDateString();
+    }
+}
+
+function showTaskMenu(event, taskId) {
+    event.stopPropagation();
+    // Placeholder for future menu functionality
+    console.log('Menu clicked for task:', taskId);
 }

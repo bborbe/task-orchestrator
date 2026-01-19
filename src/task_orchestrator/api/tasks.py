@@ -1,24 +1,34 @@
 """Task API endpoints."""
 
-# ruff: noqa: B008  # FastAPI Depends pattern is safe in function signatures
+# FastAPI Depends pattern is safe in function signatures
 
+import logging
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from task_orchestrator.api.models import SessionResponse, Task, TaskResponse
-from task_orchestrator.claude.executor import ClaudeExecutor
 from task_orchestrator.config import VaultConfig
 from task_orchestrator.factory import (
     get_config,
-    get_executor,
     get_task_reader_for_vault,
     get_vault_config,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# Global session manager (initialized in main)
+_session_manager: "SessionManager | None" = None  # type: ignore[name-defined]
+
+
+def set_session_manager(manager: "SessionManager") -> None:  # type: ignore[name-defined]
+    """Set global session manager."""
+    global _session_manager
+    _session_manager = manager
 
 
 class VaultResponse(BaseModel):
@@ -104,44 +114,71 @@ async def list_tasks(
 async def run_task(
     vault: str,
     task_id: str,
-    executor: ClaudeExecutor = Depends(get_executor),
 ) -> SessionResponse:
-    """Start a Claude Code session for the given task.
+    """Create a Claude Code session for the given task.
 
     Args:
         vault: Vault name
         task_id: Task ID (filename without .md)
-        executor: Claude executor dependency
 
     Returns:
-        Session information for handoff
+        Session information with command to execute
 
     Raises:
-        HTTPException: If task not found or missing project field
+        HTTPException: If task not found or session creation fails
     """
+    logger.info(f"run_task called: vault={vault}, task_id={task_id}")
+
+    if not _session_manager:
+        logger.error("Session manager not initialized!")
+        raise HTTPException(status_code=500, detail="Session manager not initialized")
+
     try:
         reader = get_task_reader_for_vault(vault)
+        vault_config = get_vault_config(vault)
+
         # Read task
         task = reader.read_task(task_id)
 
-        # Validate project path
-        if not task.project_path:
-            raise HTTPException(
-                status_code=400,
-                detail="Task missing 'project' field in frontmatter",
-            )
+        # Build relative task file path (relative to vault)
+        task_file_path = f"{vault_config.tasks_folder}/{task.id}.md"
 
-        # Create session
-        session_id = executor.create_session(task, task.project_path)
+        # Send /work-on-task prompt and get session_id from Claude
+        # Set cwd to vault path so relative paths work
+        prompt = f'/work-on-task "{task_file_path}"'
+        logger.info(
+            f"Creating session for task {task_id} with prompt: {prompt}, cwd: {vault_config.vault_path}"
+        )
+
+        session_id, response = await _session_manager.send_prompt(
+            prompt, cwd=vault_config.vault_path
+        )
+        logger.info(f"Session {session_id} created, response length: {len(response)} chars")
+
+        # Save session_id to task frontmatter
+        try:
+            reader.update_task_session_id(task_id, session_id)
+            logger.info(f"Saved session_id to task frontmatter: {task_id}")
+        except Exception as save_error:
+            logger.error(f"Failed to save session_id to frontmatter: {save_error}")
+            # Continue anyway - user can still use the session, just won't persist
+
+        # Build command: cd to vault + claude --resume
+        command = f"cd {vault_config.vault_path} && claude --resume {session_id}"
+
+        logger.info(f"Returning session response: session_id={session_id}, command={command}")
 
         return SessionResponse(
             session_id=session_id,
-            handoff_command=f"claude -p {session_id}",
+            command=command,
+            working_dir=vault_config.vault_path,
         )
 
     except FileNotFoundError as e:
+        logger.error(f"Task not found: {e}")
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except RuntimeError as e:
+    except Exception as e:
+        logger.exception(f"Error creating session: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -187,6 +224,8 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         status=task.status,
         phase=task.phase,
         project_path=task.project_path,
+        description=task.description,
+        modified_date=task.modified_date,
         obsidian_url=obsidian_url,
         defer_date=task.defer_date,
         planned_date=task.planned_date,
@@ -194,4 +233,5 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         priority=task.priority,
         category=task.category,
         recurring=task.recurring,
+        claude_session_id=task.claude_session_id,
     )

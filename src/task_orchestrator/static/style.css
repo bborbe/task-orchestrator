@@ -160,6 +160,9 @@ h1 {
     border: 1px solid #4a4a4a;
     cursor: grab;
     transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
 .task-card:hover {
@@ -170,6 +173,22 @@ h1 {
 .task-card.dragging {
     opacity: 0.5;
     cursor: grabbing;
+}
+
+.card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #4a4a4a;
 }
 
 .cards.drag-over {
@@ -209,24 +228,90 @@ h1 {
     font-family: monospace;
 }
 
-.task-card button {
-    background: #60a5fa;
+.task-description {
+    font-size: 0.875rem;
+    color: #9ca3af;
+    line-height: 1.4;
+}
+
+.task-badge {
+    display: inline-block;
+    background: #4a4a4a;
+    border: 1px solid #5a5a5a;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+    width: fit-content;
+}
+
+.task-timestamp {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.card-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.start-btn {
+    background: #d4e157;
     border: none;
     padding: 0.4rem 0.8rem;
     border-radius: 4px;
-    color: white;
+    color: #1a1a1a;
     cursor: pointer;
     font-size: 0.85rem;
-    font-weight: 500;
-    width: 100%;
+    font-weight: 600;
 }
 
-.task-card button:hover {
-    background: #3b82f6;
+.start-btn:hover {
+    background: #c0ca33;
 }
 
-.task-card button:active {
-    background: #2563eb;
+.start-btn:active {
+    background: #afb42b;
+}
+
+.resume-btn {
+    background: #4fc3f7;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    color: #1a1a1a;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.resume-btn:hover {
+    background: #29b6f6;
+}
+
+.resume-btn:active {
+    background: #03a9f4;
+}
+
+.menu-btn {
+    background: transparent;
+    border: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.menu-btn:hover {
+    background: #4a4a4a;
+    color: #e0e0e0;
 }
 
 /* Modal */
@@ -266,14 +351,26 @@ h1 {
 }
 
 .modal-content code {
+    display: inline-block;
+    background: #1a1a1a;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin: 0.25rem 0;
+    font-family: "SF Mono", Monaco, monospace;
+    font-size: 0.9rem;
+}
+
+.modal-content .command-block {
     display: block;
     background: #1a1a1a;
     padding: 0.75rem;
     border-radius: 4px;
     margin: 0.5rem 0;
     font-family: "SF Mono", Monaco, monospace;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     word-break: break-all;
+    white-space: pre-wrap;
+    overflow-x: auto;
 }
 
 .modal-buttons {

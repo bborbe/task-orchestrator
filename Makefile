@@ -1,31 +1,42 @@
-.PHONY: install format lint typecheck check test precommit run watch
-
 # Development targets
-install:
+.PHONY: sync
+sync:
 	uv sync --all-extras
 
+.PHONY: format
 format:
 	uv run ruff format .
 	uv run ruff check --fix . || true
 
+.PHONY: lint
 lint:
 	uv run ruff check .
 
+.PHONY: typecheck
 typecheck:
 	uv run mypy src
 
+.PHONY: check
 check: lint typecheck
 
+.PHONY: test
 test:
 	uv run pytest || test $$? -eq 5
 
-precommit: format test check
+.PHONY: test-integration
+test-integration:
+	uv run pytest -m integration -v
+
+.PHONY: precommit
+precommit: sync format test check
 	@echo "✓ All precommit checks passed"
 
 # Run server
-run:
+.PHONY: run
+run: sync
 	uv run task-orchestrator
 
 # Run server with auto-reload on code changes
-watch:
+.PHONY: watch
+watch: sync
 	uv run uvicorn task_orchestrator.__main__:app --reload --host 127.0.0.1 --port 8000
