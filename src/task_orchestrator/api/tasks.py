@@ -4,6 +4,7 @@
 
 import logging
 from datetime import date
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
@@ -17,15 +18,18 @@ from task_orchestrator.factory import (
     get_vault_config,
 )
 
+if TYPE_CHECKING:
+    from task_orchestrator.claude.session_manager import SessionManager
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # Global session manager (initialized in main)
-_session_manager: "SessionManager | None" = None  # type: ignore[name-defined]
+_session_manager: "SessionManager | None" = None
 
 
-def set_session_manager(manager: "SessionManager") -> None:  # type: ignore[name-defined]
+def set_session_manager(manager: "SessionManager") -> None:
     """Set global session manager."""
     global _session_manager
     _session_manager = manager
@@ -146,9 +150,7 @@ async def run_task(
         # Send /work-on-task prompt and get session_id from Claude
         # Set cwd to vault path so relative paths work
         prompt = f'/work-on-task "{task_file_path}"'
-        logger.info(
-            f"Creating session for task {task_id} with prompt: {prompt}, cwd: {vault_config.vault_path}"
-        )
+        logger.info(f"Creating session for task {task_id}, cwd: {vault_config.vault_path}")
 
         session_id, response = await _session_manager.send_prompt(
             prompt, cwd=vault_config.vault_path

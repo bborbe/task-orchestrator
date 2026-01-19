@@ -58,6 +58,17 @@ h1 {
     outline-offset: 2px;
 }
 
+.ws-status {
+    font-size: 1.2rem;
+    color: #4caf50;
+    cursor: default;
+    transition: color 0.3s ease;
+}
+
+.ws-status.disconnected {
+    color: #f44336;
+}
+
 #refresh-btn {
     background: #3a3a3a;
     border: none;

@@ -12,9 +12,11 @@ dependencies = [
     "claude-code-sdk>=0.0.25",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "websockets>=14.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "pyyaml>=6.0.0",
+    "watchdog>=5.0.0",
 ]
 
 [project.optional-dependencies]

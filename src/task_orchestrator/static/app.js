@@ -2,11 +2,13 @@
 
 let currentVault = null;
 let tasksCache = {}; // Map of task ID -> task data
+let ws = null; // WebSocket connection
 
 // Load tasks on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadVaults();
     setupEventListeners();
+    connectWebSocket();
 });
 
 function setupEventListeners() {
@@ -373,4 +375,91 @@ function showTaskMenu(event, taskId) {
     event.stopPropagation();
     // Placeholder for future menu functionality
     console.log('Menu clicked for task:', taskId);
+}
+
+// WebSocket functions for real-time updates
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        updateConnectionStatus(true);
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data);
+        handleTaskUpdate(data);
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        updateConnectionStatus(false);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected, reconnecting in 3s...');
+        updateConnectionStatus(false);
+        setTimeout(connectWebSocket, 3000);  // Auto-reconnect
+    };
+}
+
+function handleTaskUpdate(data) {
+    const { type, task_id, vault } = data;
+
+    // Ignore updates for other vaults
+    if (vault !== currentVault) {
+        console.log(`Ignoring update for vault ${vault} (current: ${currentVault})`);
+        return;
+    }
+
+    console.log(`Handling ${type} event for task ${task_id}`);
+
+    switch (type) {
+        case 'modified':
+        case 'created':
+            // Reload all tasks to get updated data
+            loadTasks();
+            break;
+        case 'deleted':
+            // Remove task card from UI
+            removeTaskCard(task_id);
+            break;
+        case 'moved':
+            // Reload tasks (task renamed)
+            loadTasks();
+            break;
+        default:
+            console.warn(`Unknown event type: ${type}`);
+    }
+}
+
+function removeTaskCard(taskId) {
+    // Find and remove the task card from DOM
+    const card = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (card) {
+        card.remove();
+        console.log(`Removed task card: ${taskId}`);
+    }
+
+    // Remove from cache
+    if (tasksCache[taskId]) {
+        delete tasksCache[taskId];
+    }
+}
+
+function updateConnectionStatus(connected) {
+    const statusEl = document.getElementById('ws-status');
+    if (statusEl) {
+        if (connected) {
+            statusEl.classList.remove('disconnected');
+            statusEl.title = 'WebSocket connected';
+        } else {
+            statusEl.classList.add('disconnected');
+            statusEl.title = 'WebSocket disconnected';
+        }
+    }
 }

@@ -39,7 +39,9 @@ def test_client(
     # Mock session manager and client factory
     mock_session_manager = MagicMock()
     mock_session_manager.create_session = AsyncMock()
-    mock_session_manager.send_prompt = AsyncMock(return_value=("test-session-id", "Mocked response"))
+    mock_session_manager.send_prompt = AsyncMock(
+        return_value=("test-session-id", "Mocked response")
+    )
 
     # Inject mocks into tasks module
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)

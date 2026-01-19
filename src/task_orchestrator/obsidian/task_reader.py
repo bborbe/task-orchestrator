@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 class TaskReader(Protocol):
     """Protocol for reading tasks."""
 
+    @property
+    def tasks_dir(self) -> Path:
+        """Get the tasks directory path."""
+        ...
+
     def list_tasks(self, status_filter: list[str] | None = None) -> list[Task]:
         """List all tasks, optionally filtered by status."""
         ...
@@ -29,6 +34,10 @@ class TaskReader(Protocol):
         """Update the phase field in task frontmatter."""
         ...
 
+    def update_task_session_id(self, task_id: str, session_id: str) -> None:
+        """Update the claude_session_id field in task frontmatter."""
+        ...
+
 
 class ObsidianTaskReader:
     """Task reader for Obsidian markdown files."""
@@ -36,6 +45,11 @@ class ObsidianTaskReader:
     def __init__(self, vault_path: str, tasks_folder: str) -> None:
         """Initialize reader with vault and tasks folder paths."""
         self._tasks_dir = Path(vault_path) / tasks_folder
+
+    @property
+    def tasks_dir(self) -> Path:
+        """Get the tasks directory path."""
+        return self._tasks_dir
 
     def update_task_phase(self, task_id: str, new_phase: str) -> None:
         """Update the phase field in task frontmatter."""
