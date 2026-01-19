@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskOrchestrator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>TaskOrchestrator</h1>
+            <div class="header-controls">
+                <select id="vault-selector" class="vault-selector">
+                    <option value="">Loading vaults...</option>
+                </select>
+                <button id="refresh-btn">↻ Refresh</button>
+            </div>
+        </header>
+
+        <div class="kanban-board">
+            <div class="kanban-column" data-phase="todo">
+                <h2>Todo</h2>
+                <div class="cards" id="cards-todo"></div>
+            </div>
+            <div class="kanban-column" data-phase="planning">
+                <h2>Planning</h2>
+                <div class="cards" id="cards-planning"></div>
+            </div>
+            <div class="kanban-column" data-phase="in_progress">
+                <h2>In Progress</h2>
+                <div class="cards" id="cards-in_progress"></div>
+            </div>
+            <div class="kanban-column" data-phase="ai_review">
+                <h2>AI Review</h2>
+                <div class="cards" id="cards-ai_review"></div>
+            </div>
+            <div class="kanban-column" data-phase="human_review">
+                <h2>Human Review</h2>
+                <div class="cards" id="cards-human_review"></div>
+            </div>
+            <div class="kanban-column" data-phase="done">
+                <h2>Done</h2>
+                <div class="cards" id="cards-done"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Modal -->
+    <div id="session-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Session Started</h2>
+            <p><strong>Session ID:</strong> <code id="session-id"></code></p>
+            <p><strong>Handoff Command:</strong></p>
+            <code id="handoff-command"></code>
+            <div class="modal-buttons">
+                <button id="copy-btn">Copy Command</button>
+                <button id="close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
