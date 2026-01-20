@@ -34,7 +34,7 @@ class TaskReader(Protocol):
         """Update the phase field in task frontmatter."""
         ...
 
-    def update_task_session_id(self, task_id: str, session_id: str) -> None:
+    def update_task_session_id(self, task_id: str, session_id: str | None) -> None:
         """Update the claude_session_id field in task frontmatter."""
         ...
 
@@ -90,7 +90,7 @@ class ObsidianTaskReader:
         # Write back with same encoding
         file_path.write_text(new_content, encoding=encoding)
 
-    def update_task_session_id(self, task_id: str, session_id: str) -> None:
+    def update_task_session_id(self, task_id: str, session_id: str | None) -> None:
         """Update the claude_session_id field in task frontmatter."""
         file_path = self._tasks_dir / f"{task_id}.md"
         if not file_path.exists():

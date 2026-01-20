@@ -182,14 +182,6 @@ function createTaskCard(task) {
     });
 
     // Build card HTML with new layout
-    const description = task.description
-        ? `<div class="task-description">${escapeHtml(task.description)}</div>`
-        : '';
-
-    const phaseBadge = task.phase
-        ? `<div class="task-badge">${formatPhase(task.phase)}</div>`
-        : '';
-
     const timestamp = task.modified_date
         ? `<span class="task-timestamp">🕐 ${formatRelativeTime(task.modified_date)}</span>`
         : '';
@@ -210,8 +202,6 @@ function createTaskCard(task) {
                     📝
                 </a>
             </div>
-            ${description}
-            ${phaseBadge}
         </div>
         <div class="card-footer">
             ${timestamp}
@@ -373,8 +363,132 @@ function formatRelativeTime(timestamp) {
 
 function showTaskMenu(event, taskId) {
     event.stopPropagation();
-    // Placeholder for future menu functionality
-    console.log('Menu clicked for task:', taskId);
+
+    // Remove any existing menu
+    const existingMenu = document.querySelector('.task-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
+    // Create menu
+    const menu = document.createElement('div');
+    menu.className = 'task-menu';
+
+    // Get task from cache to check if it has a session
+    const task = tasksCache[taskId];
+    const hasSession = task && task.claude_session_id;
+
+    const menuItems = [
+        { label: 'Move to', action: 'move', disabled: false },
+        { label: 'Error', action: 'error', disabled: true },
+        { label: 'In Progress', action: 'in_progress', disabled: false },
+        { label: 'AI Review', action: 'ai_review', disabled: false },
+        { label: 'Human Review', action: 'human_review', disabled: false },
+        { label: 'Done', action: 'done', disabled: false },
+    ];
+
+    // Add Clear Session option if task has a session
+    if (hasSession) {
+        menuItems.unshift({ label: 'Clear Session', action: 'clear_session', disabled: false });
+    }
+
+    menuItems.forEach(item => {
+        const menuItem = document.createElement('div');
+        menuItem.className = 'task-menu-item';
+        if (item.disabled) {
+            menuItem.classList.add('disabled');
+        }
+        if (item.label === 'Move to') {
+            menuItem.classList.add('header');
+        }
+        menuItem.textContent = item.label;
+
+        if (!item.disabled && item.action !== 'move') {
+            menuItem.addEventListener('click', () => handleMenuAction(taskId, item.action));
+        }
+
+        menu.appendChild(menuItem);
+    });
+
+    // Position menu
+    const button = event.target;
+    const rect = button.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = `${rect.bottom + 5}px`;
+    menu.style.left = `${rect.left - 150}px`; // Menu width is ~160px
+
+    document.body.appendChild(menu);
+
+    // Close menu on click outside
+    setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+    }, 0);
+}
+
+function closeMenu() {
+    const menu = document.querySelector('.task-menu');
+    if (menu) {
+        menu.remove();
+    }
+    document.removeEventListener('click', closeMenu);
+}
+
+async function handleMenuAction(taskId, action) {
+    if (!currentVault) {
+        alert('No vault selected');
+        return;
+    }
+
+    closeMenu();
+
+    if (action === 'clear_session') {
+        await clearTaskSession(taskId);
+    } else {
+        // Move to phase
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/phase?vault=${encodeURIComponent(currentVault)}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ phase: action }),
+            });
+
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(error);
+            }
+
+            await loadTasks();
+        } catch (error) {
+            console.error('Failed to update task phase:', error);
+            alert(`Failed to update task: ${error.message}`);
+        }
+    }
+}
+
+async function clearTaskSession(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/session?vault=${encodeURIComponent(currentVault)}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+
+        // Update cache
+        if (tasksCache[taskId]) {
+            tasksCache[taskId].claude_session_id = null;
+        }
+
+        // Reload tasks to update UI
+        await loadTasks();
+    } catch (error) {
+        console.error('Failed to clear session:', error);
+        alert(`Failed to clear session: ${error.message}`);
+    }
 }
 
 // WebSocket functions for real-time updates

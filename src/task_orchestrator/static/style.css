@@ -274,12 +274,13 @@ h1 {
 .start-btn {
     background: #d4e157;
     border: none;
-    padding: 0.4rem 0.8rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
     color: #1a1a1a;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .start-btn:hover {
@@ -293,12 +294,13 @@ h1 {
 .resume-btn {
     background: #4fc3f7;
     border: none;
-    padding: 0.4rem 0.8rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
     color: #1a1a1a;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .resume-btn:hover {
@@ -423,4 +425,40 @@ h1 {
     text-align: center;
     padding: 2rem;
     color: #9ca3af;
+}
+
+/* Task menu dropdown */
+.task-menu {
+    background: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 0.5rem 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.task-menu-item {
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.task-menu-item:hover:not(.disabled):not(.header) {
+    background: #3a3a3a;
+}
+
+.task-menu-item.header {
+    font-weight: 600;
+    cursor: default;
+    color: #9ca3af;
+    font-size: 0.85rem;
+    padding: 0.4rem 1rem;
+}
+
+.task-menu-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

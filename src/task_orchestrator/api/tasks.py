@@ -213,6 +213,33 @@ async def update_task_phase(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.delete("/tasks/{task_id}/session")
+async def clear_task_session(
+    vault: str,
+    task_id: str,
+) -> dict[str, str]:
+    """Clear claude_session_id from task frontmatter.
+
+    Args:
+        vault: Vault name
+        task_id: Task ID (filename without .md)
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException: If task not found or update fails
+    """
+    try:
+        reader = get_task_reader_for_vault(vault)
+        reader.update_task_session_id(task_id, None)
+        return {"status": "success", "task_id": task_id}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
     """Convert Task to TaskResponse."""
     # Build Obsidian URL
