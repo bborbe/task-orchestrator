@@ -1,4 +1,4 @@
-# TaskOrchestrator
+# Task Orchestrator
 
 Orchestrate Claude Code sessions from Obsidian tasks.
 

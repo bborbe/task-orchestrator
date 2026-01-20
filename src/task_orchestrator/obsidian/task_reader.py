@@ -187,6 +187,9 @@ class ObsidianTaskReader:
         # Get Claude session ID (optional)
         claude_session_id = frontmatter.get("claude_session_id")
 
+        # Get assignee (optional)
+        assignee = frontmatter.get("assignee")
+
         # Use filename as title (not H1 headings which are section names)
         title = file_path.stem
 
@@ -215,6 +218,7 @@ class ObsidianTaskReader:
             category=category,
             recurring=recurring,
             claude_session_id=claude_session_id,
+            assignee=assignee,
         )
 
     def _normalize_priority(self, value: Any) -> int | str | None:

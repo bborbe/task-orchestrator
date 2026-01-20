@@ -14,6 +14,7 @@ class VaultConfig:
     vault_path: str
     vault_name: str  # For obsidian:// URLs
     tasks_folder: str
+    claude_script: str = "claude"  # Script to run Claude sessions (default: "claude")
 
 
 class Config(BaseSettings):
@@ -26,12 +27,14 @@ class Config(BaseSettings):
                 vault_path="/Users/bborbe/Documents/Obsidian/Personal",
                 vault_name="Personal",
                 tasks_folder="24 Tasks",
+                claude_script="claude-obsidian-personal.sh",
             ),
             VaultConfig(
                 name="Brogrammers",
                 vault_path="/Users/bborbe/Documents/Obsidian/Brogrammers",
                 vault_name="Brogrammers",
                 tasks_folder="40 Tasks",
+                claude_script="claude-obsidian-brogrammers.sh",
             ),
         ]
     )

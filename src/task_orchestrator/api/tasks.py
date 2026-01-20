@@ -41,6 +41,7 @@ class VaultResponse(BaseModel):
     name: str
     vault_path: str
     tasks_folder: str
+    claude_script: str
 
 
 class UpdatePhaseRequest(BaseModel):
@@ -62,6 +63,7 @@ async def list_vaults() -> list[VaultResponse]:
             name=vault.name,
             vault_path=vault.vault_path,
             tasks_folder=vault.tasks_folder,
+            claude_script=vault.claude_script,
         )
         for vault in config.vaults
     ]
@@ -165,8 +167,8 @@ async def run_task(
             logger.error(f"Failed to save session_id to frontmatter: {save_error}")
             # Continue anyway - user can still use the session, just won't persist
 
-        # Build command: cd to vault + claude --resume
-        command = f"cd {vault_config.vault_path} && claude --resume {session_id}"
+        # Build command: use vault-specific script from config (handles cd internally)
+        command = f"{vault_config.claude_script} --resume {session_id}"
 
         logger.info(f"Returning session response: session_id={session_id}, command={command}")
 
@@ -263,4 +265,5 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         category=task.category,
         recurring=task.recurring,
         claude_session_id=task.claude_session_id,
+        assignee=task.assignee,
     )

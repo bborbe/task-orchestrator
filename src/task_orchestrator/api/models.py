@@ -27,6 +27,7 @@ class Task:
     category: str | None  # From frontmatter
     recurring: str | None  # From frontmatter: daily, weekly, monthly
     claude_session_id: str | None  # From frontmatter: Claude Code session UUID
+    assignee: str | None  # From frontmatter: Person assigned to the task
 
 
 class TaskResponse(BaseModel):
@@ -47,6 +48,7 @@ class TaskResponse(BaseModel):
     category: str | None
     recurring: str | None
     claude_session_id: str | None
+    assignee: str | None
 
 
 class SessionResponse(BaseModel):

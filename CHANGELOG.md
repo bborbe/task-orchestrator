@@ -8,6 +8,17 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.2.0
+
+- Add assignee display with 👤 icon badge in task cards
+- Add Jira issue extraction from task titles with clickable 🔖 badges
+- Add project domain mapping (BRO→seibertgroup.atlassian.net, TRADE→borbe.atlassian.net)
+- Add configurable claude_script per vault (defaults to "claude")
+- Add clickable task titles that link to Obsidian (entire title, not just icon)
+- Improve UI spacing for compact Jira-style layout
+- Move menu button (⋮) to top-right corner of cards
+- Replace 📝 icon with subtle ↗ arrow icon
+
 ## v0.1.0
 
 - Add FastAPI web UI for viewing and managing Obsidian tasks

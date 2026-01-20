@@ -85,8 +85,8 @@ h1 {
 
 .kanban-board {
     display: flex;
-    gap: 1rem;
-    padding: 2rem;
+    gap: 0.5rem;
+    padding: 1rem;
     flex: 1;
     overflow-x: auto;
     overflow-y: hidden;
@@ -100,11 +100,14 @@ h1 {
     max-height: 100%;
     background: #2a2a2a;
     border-radius: 8px;
-    padding: 1rem;
+    padding: 0.2rem;
+}
+.kanban-column h2 {
+    padding: 0.5rem;
 }
 
 .kanban-column h2 {
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
     font-size: 1rem;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -140,7 +143,7 @@ h1 {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0.5rem;
+    padding: 0rem;
     border-radius: 4px;
     transition: background 0.2s, border 0.2s;
 }
@@ -166,14 +169,15 @@ h1 {
 .task-card {
     background: #3a3a3a;
     border-radius: 6px;
-    padding: 1rem;
-    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
     border: 1px solid #4a4a4a;
     cursor: grab;
     transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    position: relative;
 }
 
 .task-card:hover {
@@ -187,7 +191,6 @@ h1 {
 }
 
 .card-content {
-    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -198,8 +201,14 @@ h1 {
     justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid #4a4a4a;
+    padding-top: 0;
+}
+
+.card-footer-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .cards.drag-over {
@@ -207,29 +216,93 @@ h1 {
     border: 2px dashed #60a5fa;
 }
 
-.task-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
+.task-title {
+    font-size: 0.875rem;
+    line-height: 1.3;
+    font-weight: 400;
     margin-bottom: 0.5rem;
 }
 
-.task-card h3 {
-    font-size: 0.95rem;
-    line-height: 1.4;
-    flex: 1;
+.task-title-link {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+    color: #e0e0e0;
+    transition: color 0.2s;
 }
 
-.obsidian-link {
-    font-size: 1rem;
+.task-title-link:hover {
+    color: #60a5fa;
+}
+
+.jira-badge {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: 4px;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: #96999e;
     text-decoration: none;
-    opacity: 0.6;
-    transition: opacity 0.2s;
+    padding: 0;
+    transition: color 0.2s;
+    max-width: fit-content;
+    box-sizing: border-box;
+}
+
+.jira-badge:hover {
+    color: #669df1;
+}
+
+.jira-badge span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jira-icon {
+    font-size: 0.875rem;
+    line-height: 1;
     flex-shrink: 0;
 }
 
-.obsidian-link:hover {
-    opacity: 1;
+.assignee-badge {
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: 4px;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: #96999e;
+    padding: 0;
+    max-width: fit-content;
+    box-sizing: border-box;
+}
+
+.assignee-badge span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.assignee-icon {
+    font-size: 0.875rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.obsidian-icon {
+    font-size: 0.875rem;
+    color: #9ca3af;
+    margin-left: 0.25rem;
+    flex-shrink: 0;
 }
 
 .project-badge {
@@ -312,14 +385,18 @@ h1 {
 }
 
 .menu-btn {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
     background: transparent;
     border: none;
-    padding: 0.4rem 0.6rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
     color: #9ca3af;
     cursor: pointer;
     font-size: 1.2rem;
     line-height: 1;
+    z-index: 1;
 }
 
 .menu-btn:hover {

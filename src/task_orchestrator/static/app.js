@@ -164,6 +164,33 @@ async function loadTasks() {
     }
 }
 
+function extractJiraIssue(title) {
+    // Detect Jira issue key pattern: PROJECT-NUMBER
+    const jiraKeyPattern = /\b([A-Z]+)-(\d+)\b/;
+    const match = title.match(jiraKeyPattern);
+
+    if (!match) {
+        return { title: title, issueKey: null, issueUrl: null };
+    }
+
+    const issueKey = match[0];
+    const project = match[1];
+
+    // Map project keys to Atlassian domains
+    const projectDomains = {
+        'BRO': 'seibertgroup.atlassian.net',
+        'TRADE': 'borbe.atlassian.net'
+    };
+
+    const domain = projectDomains[project];
+    const issueUrl = domain ? `https://${domain}/browse/${issueKey}` : null;
+
+    // Remove issue key from title
+    const cleanTitle = title.replace(jiraKeyPattern, '').trim();
+
+    return { title: cleanTitle, issueKey, issueUrl };
+}
+
 function createTaskCard(task) {
     const card = document.createElement('div');
     card.className = 'task-card';
@@ -181,10 +208,8 @@ function createTaskCard(task) {
         card.classList.remove('dragging');
     });
 
-    // Build card HTML with new layout
-    const timestamp = task.modified_date
-        ? `<span class="task-timestamp">🕐 ${formatRelativeTime(task.modified_date)}</span>`
-        : '';
+    // Extract Jira issue info
+    const { title, issueKey, issueUrl } = extractJiraIssue(task.title);
 
     // Show Resume button if session exists, otherwise Start
     const hasSession = task.claude_session_id;
@@ -194,20 +219,37 @@ function createTaskCard(task) {
 
     const menuButton = '<button class="menu-btn" onclick="showTaskMenu(event, \'' + task.id + '\')">⋮</button>';
 
+    // Jira issue badge (if present)
+    const jiraBadge = issueKey && issueUrl
+        ? `<a href="${issueUrl}" class="jira-badge" target="_blank" title="Open in Jira">
+             <span class="jira-icon">🔖</span><span>${escapeHtml(issueKey)}</span>
+           </a>`
+        : '';
+
+    // Assignee badge (if present)
+    const assigneeBadge = task.assignee
+        ? `<span class="assignee-badge" title="Assigned to ${escapeHtml(task.assignee)}">
+             <span class="assignee-icon">👤</span><span>${escapeHtml(task.assignee)}</span>
+           </span>`
+        : '';
+
     card.innerHTML = `
+        ${menuButton}
         <div class="card-content">
-            <div class="task-header">
-                <h3>${escapeHtml(task.title)}</h3>
-                <a href="${task.obsidian_url}" class="obsidian-link" title="Open in Obsidian">
-                    📝
+            <h3 class="task-title">
+                <a href="${task.obsidian_url}" class="task-title-link" title="Open in Obsidian">
+                    ${escapeHtml(title)}
+                    <span class="obsidian-icon">↗</span>
                 </a>
-            </div>
+            </h3>
         </div>
         <div class="card-footer">
-            ${timestamp}
+            <div class="card-footer-left">
+                ${jiraBadge}
+                ${assigneeBadge}
+            </div>
             <div class="card-actions">
                 ${startButton}
-                ${menuButton}
             </div>
         </div>
     `;
@@ -246,7 +288,7 @@ async function runTask(taskId) {
                 throw new Error('Vault not found');
             }
 
-            const command = `cd ${vaultConfig.vault_path} && claude --resume ${task.claude_session_id}`;
+            const command = `${vaultConfig.claude_script} --resume ${task.claude_session_id}`;
             showModal(task.claude_session_id, command, vaultConfig.vault_path);
 
             // Restore button
