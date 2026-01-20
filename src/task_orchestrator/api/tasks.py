@@ -3,7 +3,7 @@
 # FastAPI Depends pattern is safe in function signatures
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -48,6 +48,12 @@ class UpdatePhaseRequest(BaseModel):
     """Request model for updating task phase."""
 
     phase: str
+
+
+class ExecuteCommandRequest(BaseModel):
+    """Request model for executing slash command."""
+
+    command: str
 
 
 @router.get("/vaults", response_model=list[VaultResponse])
@@ -183,6 +189,105 @@ async def run_task(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error creating session: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/tasks/{task_id}/execute-command", response_model=SessionResponse)
+async def execute_slash_command(
+    vault: str,
+    task_id: str,
+    request: ExecuteCommandRequest,
+) -> SessionResponse:
+    """Execute slash command in existing or new Claude session.
+
+    Args:
+        vault: Vault name
+        task_id: Task ID
+        request: Command to execute (e.g., "complete-task", "defer-task")
+
+    Returns:
+        Session information with resume command
+    """
+    logger.info(f"execute_slash_command: vault={vault}, task_id={task_id}, command={request.command}")
+
+    if not _session_manager:
+        raise HTTPException(status_code=500, detail="Session manager not initialized")
+
+    try:
+        reader = get_task_reader_for_vault(vault)
+        vault_config = get_vault_config(vault)
+
+        # Read task
+        task = reader.read_task(task_id)
+
+        # Build task file path
+        task_file_path = f"{vault_config.tasks_folder}/{task.id}.md"
+
+        # Check if task has existing session
+        existing_session_id = task.claude_session_id
+
+        # Send slash command directly - they load task context themselves
+        # Calculate tomorrow for defer-task command
+        if request.command == "defer-task":
+            tomorrow = (date.today() + timedelta(days=1)).isoformat()
+            prompt = f'/{request.command} "{task_file_path}" {tomorrow}\n\nWhen finished, respond with only: {{"success":true}} or {{"success":false,"error":"reason"}}'
+        elif request.command == "complete-task":
+            prompt = f'/{request.command} "{task_file_path}"\n\nWhen finished, respond with only: {{"success":true}} or {{"success":false,"error":"reason"}}'
+        else:
+            prompt = f'/{request.command} "{task_file_path}"'
+
+        if existing_session_id:
+            logger.info(f"Resuming existing session: {existing_session_id} with command: {prompt}")
+        else:
+            logger.info(f"Creating new session with command: {prompt}")
+
+        # Send prompt to Claude
+        session_id, response = await _session_manager.send_prompt(
+            prompt, cwd=vault_config.vault_path
+        )
+
+        # Parse response for success/failure
+        import json
+        import re
+        success = None
+        error_message = None
+
+        # Try to extract JSON from response
+        json_match = re.search(r'\{[^}]*"success"[^}]*\}', response)
+        if json_match:
+            try:
+                result = json.loads(json_match.group())
+                success = result.get("success", None)
+                error_message = result.get("error", None)
+                logger.info(f"Parsed result: success={success}, error={error_message}")
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse JSON from response: {json_match.group()}")
+
+        # Save session_id if new
+        if not existing_session_id:
+            try:
+                reader.update_task_session_id(task_id, session_id)
+                logger.info(f"Saved new session_id: {session_id}")
+            except Exception as save_error:
+                logger.error(f"Failed to save session_id: {save_error}")
+
+        # Build resume command
+        command = f"{vault_config.claude_script} --resume {session_id}"
+
+        return SessionResponse(
+            session_id=session_id,
+            command=command,
+            working_dir=vault_config.vault_path,
+            executed_command=prompt,
+            success=success,
+            error=error_message,
+        )
+
+    except FileNotFoundError as e:
+        logger.error(f"Task not found: {e}")
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error executing command: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

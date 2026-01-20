@@ -134,3 +134,54 @@ Task deferred until May.
 
     assert task.id == "Deferred Task"
     assert task.defer_date == "2026-05-01"
+
+
+def test_normalize_status_variations(tmp_vault: Path) -> None:
+    """Test that status variations are normalized to in_progress."""
+    tasks_dir = tmp_vault / "24 Tasks"
+    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+
+    # Test all variations that should normalize to "in_progress"
+    status_variations = [
+        ("in_progress", "in_progress"),
+        ("in-progress", "in_progress"),
+        ("inprogress", "in_progress"),
+        ("current", "in_progress"),
+    ]
+
+    for idx, (status_input, expected) in enumerate(status_variations):
+        task_file = tasks_dir / f"Task{idx}.md"
+        content = f"""---
+status: {status_input}
+---
+
+# Task
+Test task with status: {status_input}
+"""
+        task_file.write_text(content)
+
+        task = reader.read_task(f"Task{idx}")
+        assert task.status == expected, f"Status '{status_input}' should normalize to '{expected}', got '{task.status}'"
+
+
+def test_normalize_status_preserves_other_statuses(tmp_vault: Path) -> None:
+    """Test that other statuses are preserved as-is."""
+    tasks_dir = tmp_vault / "24 Tasks"
+    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+
+    # Test that other statuses are not changed
+    other_statuses = ["todo", "completed", "backlog", "hold"]
+
+    for idx, status in enumerate(other_statuses):
+        task_file = tasks_dir / f"OtherTask{idx}.md"
+        content = f"""---
+status: {status}
+---
+
+# Task
+Test task with status: {status}
+"""
+        task_file.write_text(content)
+
+        task = reader.read_task(f"OtherTask{idx}")
+        assert task.status == status, f"Status '{status}' should be preserved, got '{task.status}'"

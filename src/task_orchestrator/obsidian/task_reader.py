@@ -161,7 +161,7 @@ class ObsidianTaskReader:
         frontmatter = self._extract_frontmatter(content)
 
         # Get status (required field)
-        status = frontmatter.get("status", "unknown")
+        status = self._normalize_status(frontmatter.get("status", "unknown"))
 
         # Get phase (optional: todo, planning, in_progress, ai_review, human_review, done)
         phase = frontmatter.get("phase")
@@ -254,6 +254,26 @@ class ObsidianTaskReader:
             return value
         # Reject floats and other unexpected types
         return None
+
+    def _normalize_status(self, value: str) -> str:
+        """Normalize status variations to canonical form.
+
+        Accepts multiple variations:
+        - "in_progress", "in-progress", "inprogress", "current" → "in_progress"
+        - All other values passed through as-is
+        """
+        if not isinstance(value, str):
+            return value
+
+        # Normalize to lowercase and remove separators
+        normalized = value.lower().replace("-", "").replace("_", "")
+
+        # Map variations to canonical "in_progress"
+        if normalized in ("inprogress", "current"):
+            return "in_progress"
+
+        # Return original value for other statuses
+        return value
 
     def _date_to_string(self, value: Any) -> str | None:
         """Convert date object to ISO string or return None."""

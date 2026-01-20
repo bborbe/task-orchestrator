@@ -8,6 +8,14 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.3.0
+- Add slash command execution API endpoint with success/failure parsing
+- Add loading modal with spinner and close button for command execution
+- Add status message display in session modal (success/failure feedback)
+- Add absolute date calculation for defer-task (tomorrow = YYYY-MM-DD)
+- Fix defer_date field reading in task reader
+- Improve slash command UX (non-blocking close, background execution)
+
 ## v0.2.0
 
 - Add assignee display with 👤 icon badge in task cards
@@ -15,6 +23,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - Add project domain mapping (BRO→seibertgroup.atlassian.net, TRADE→borbe.atlassian.net)
 - Add configurable claude_script per vault (defaults to "claude")
 - Add clickable task titles that link to Obsidian (entire title, not just icon)
+- Add "Complete Task" and "Defer Task" slash command actions to dropdown menu
+- Add status normalization (in-progress/inprogress/current → in_progress)
+- Add executed command display in session modal
 - Improve UI spacing for compact Jira-style layout
 - Move menu button (⋮) to top-right corner of cards
 - Replace 📝 icon with subtle ↗ arrow icon

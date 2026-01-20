@@ -333,9 +333,33 @@ async function runTask(taskId) {
     }
 }
 
-function showModal(sessionId, command, workingDir) {
+function showModal(sessionId, command, workingDir, executedCommand = null, success = null, error = null) {
     document.getElementById('session-id').textContent = sessionId;
     document.getElementById('handoff-command').textContent = command;
+
+    // Update executed command if provided
+    if (executedCommand) {
+        document.getElementById('executed-command').textContent = executedCommand;
+    } else {
+        document.getElementById('executed-command').textContent = '/work-on-task';
+    }
+
+    // Show success/failure status
+    const statusMessage = document.getElementById('status-message');
+    if (success === true) {
+        statusMessage.textContent = '✓ Command completed successfully';
+        statusMessage.style.backgroundColor = '#d4edda';
+        statusMessage.style.color = '#155724';
+        statusMessage.style.display = 'block';
+    } else if (success === false) {
+        statusMessage.textContent = '✗ Command failed' + (error ? ': ' + error : '');
+        statusMessage.style.backgroundColor = '#f8d7da';
+        statusMessage.style.color = '#721c24';
+        statusMessage.style.display = 'block';
+    } else {
+        statusMessage.style.display = 'none';
+    }
+
     document.getElementById('session-modal').classList.remove('hidden');
 }
 
@@ -420,19 +444,24 @@ function showTaskMenu(event, taskId) {
     const task = tasksCache[taskId];
     const hasSession = task && task.claude_session_id;
 
-    const menuItems = [
-        { label: 'Move to', action: 'move', disabled: false },
-        { label: 'Error', action: 'error', disabled: true },
-        { label: 'In Progress', action: 'in_progress', disabled: false },
-        { label: 'AI Review', action: 'ai_review', disabled: false },
-        { label: 'Human Review', action: 'human_review', disabled: false },
-        { label: 'Done', action: 'done', disabled: false },
-    ];
+    const menuItems = [];
 
     // Add Clear Session option if task has a session
     if (hasSession) {
-        menuItems.unshift({ label: 'Clear Session', action: 'clear_session', disabled: false });
+        menuItems.push({ label: 'Clear Session', action: 'clear_session', disabled: false });
     }
+
+    // Add slash command actions
+    menuItems.push({ label: 'Complete Task', action: 'complete_task', disabled: false });
+    menuItems.push({ label: 'Defer Task', action: 'defer_task', disabled: false });
+
+    // Add phase options
+    menuItems.push({ label: 'Move to', action: 'move', disabled: false });
+    menuItems.push({ label: 'Error', action: 'error', disabled: true });
+    menuItems.push({ label: 'In Progress', action: 'in_progress', disabled: false });
+    menuItems.push({ label: 'AI Review', action: 'ai_review', disabled: false });
+    menuItems.push({ label: 'Human Review', action: 'human_review', disabled: false });
+    menuItems.push({ label: 'Done', action: 'done', disabled: false });
 
     menuItems.forEach(item => {
         const menuItem = document.createElement('div');
@@ -485,6 +514,9 @@ async function handleMenuAction(taskId, action) {
 
     if (action === 'clear_session') {
         await clearTaskSession(taskId);
+    } else if (action === 'complete_task' || action === 'defer_task') {
+        // Handle slash commands
+        await executeSlashCommand(taskId, action);
     } else {
         // Move to phase
         try {
@@ -506,6 +538,64 @@ async function handleMenuAction(taskId, action) {
             console.error('Failed to update task phase:', error);
             alert(`Failed to update task: ${error.message}`);
         }
+    }
+}
+
+async function executeSlashCommand(taskId, commandType) {
+    // Show loading modal
+    const loadingModal = document.getElementById('loading-modal');
+    loadingModal.classList.remove('hidden');
+
+    // Setup close button handler
+    const closeBtn = document.getElementById('close-loading-btn');
+    const closeHandler = () => {
+        loadingModal.classList.add('hidden');
+        closeBtn.removeEventListener('click', closeHandler);
+    };
+    closeBtn.addEventListener('click', closeHandler);
+
+    try {
+        // Map action to slash command
+        const commandMap = {
+            'complete_task': 'complete-task',
+            'defer_task': 'defer-task'
+        };
+        const slashCommand = commandMap[commandType];
+
+        // Call backend endpoint
+        const response = await fetch(
+            `/api/tasks/${encodeURIComponent(taskId)}/execute-command?vault=${encodeURIComponent(currentVault)}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: slashCommand }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error('Failed to execute command');
+        }
+
+        const data = await response.json();
+
+        // Cleanup
+        closeBtn.removeEventListener('click', closeHandler);
+
+        // Hide loading modal
+        loadingModal.classList.add('hidden');
+
+        // Show modal with resume command and success/error status
+        showModal(data.session_id, data.command, data.working_dir, data.executed_command, data.success, data.error);
+
+    } catch (error) {
+        // Cleanup
+        closeBtn.removeEventListener('click', closeHandler);
+
+        // Hide loading modal
+        loadingModal.classList.add('hidden');
+
+        console.error('Error executing slash command:', error);
+        alert(`Failed to execute command: ${error.message}`);
     }
 }
 
