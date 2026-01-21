@@ -5,13 +5,24 @@ let currentAssignee = null;
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
 
+const POLL_INTERVAL_MS = 60000; // Fallback polling every 60 seconds
+
 // Load tasks on page load
 document.addEventListener('DOMContentLoaded', () => {
     parseURLParams();
     loadVaults();
     setupEventListeners();
     connectWebSocket();
+    startPolling();
 });
+
+// Fallback polling in case WebSocket misses updates
+function startPolling() {
+    setInterval(() => {
+        console.log('Polling for task updates...');
+        loadTasks();
+    }, POLL_INTERVAL_MS);
+}
 
 function parseURLParams() {
     const params = new URLSearchParams(window.location.search);

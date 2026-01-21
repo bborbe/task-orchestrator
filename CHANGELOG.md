@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.2
+- Add fallback polling every 60 seconds in case WebSocket misses updates
+
 ## v0.4.1
 - Fix phase filtering to include tasks with invalid phase values (defaults to todo)
 - Add test for tasks with defer_date=today inclusion
