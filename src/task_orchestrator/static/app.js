@@ -1,15 +1,34 @@
 // TaskOrchestrator Kanban Board
 
-let currentVault = null;
+let currentVault = null; // null = "All", or vault name
+let currentAssignee = null;
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
 
 // Load tasks on page load
 document.addEventListener('DOMContentLoaded', () => {
+    parseURLParams();
     loadVaults();
     setupEventListeners();
     connectWebSocket();
 });
+
+function parseURLParams() {
+    const params = new URLSearchParams(window.location.search);
+
+    // Parse vault parameter(s)
+    const vaultParams = params.getAll('vault');
+    if (vaultParams.length === 0) {
+        currentVault = null; // Show all
+    } else if (vaultParams.length === 1) {
+        currentVault = vaultParams[0];
+    } else {
+        currentVault = vaultParams; // Multiple vaults
+    }
+
+    // Parse assignee parameter
+    currentAssignee = params.get('assignee');
+}
 
 function setupEventListeners() {
     document.getElementById('vault-selector').addEventListener('change', handleVaultChange);
@@ -32,6 +51,12 @@ async function loadVaults() {
         // Clear existing options
         selector.innerHTML = '';
 
+        // Add "All" option
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = 'All';
+        selector.appendChild(allOption);
+
         // Add vault options
         vaults.forEach(vault => {
             const option = document.createElement('option');
@@ -40,19 +65,27 @@ async function loadVaults() {
             selector.appendChild(option);
         });
 
-        // Load saved vault from localStorage or use first vault
-        const savedVault = localStorage.getItem('selectedVault');
-        if (savedVault && vaults.find(v => v.name === savedVault)) {
-            selector.value = savedVault;
-            currentVault = savedVault;
-        } else if (vaults.length > 0) {
-            currentVault = vaults[0].name;
+        // Set selector based on currentVault (from URL or localStorage)
+        if (currentVault === null) {
+            selector.value = ''; // All
+        } else if (Array.isArray(currentVault)) {
+            // Multiple vaults - can't represent in dropdown, use "All"
+            selector.value = '';
+        } else {
+            selector.value = currentVault;
         }
 
-        // Load tasks for selected vault
-        if (currentVault) {
-            await loadTasks();
+        // If no URL params, try loading from localStorage
+        if (currentVault === null && !window.location.search) {
+            const savedVault = localStorage.getItem('selectedVault');
+            if (savedVault && vaults.find(v => v.name === savedVault)) {
+                selector.value = savedVault;
+                currentVault = savedVault;
+            }
         }
+
+        // Load tasks
+        await loadTasks();
     } catch (error) {
         console.error('Failed to load vaults:', error);
         alert(`Failed to load vaults: ${error.message}`);
@@ -60,9 +93,58 @@ async function loadVaults() {
 }
 
 function handleVaultChange(e) {
-    currentVault = e.target.value;
-    localStorage.setItem('selectedVault', currentVault);
+    const value = e.target.value;
+    currentVault = value === '' ? null : value;
+
+    // Save to localStorage
+    if (value === '') {
+        localStorage.removeItem('selectedVault');
+    } else {
+        localStorage.setItem('selectedVault', value);
+    }
+
+    // Update URL
+    updateURL();
+
+    // Reload tasks
     loadTasks();
+}
+
+function filterByAssignee(assignee) {
+    // Toggle filter - if clicking same assignee, clear it
+    if (currentAssignee === assignee) {
+        currentAssignee = null;
+    } else {
+        currentAssignee = assignee;
+    }
+
+    // Update URL
+    updateURL();
+
+    // Reload tasks
+    loadTasks();
+}
+
+function updateURL() {
+    const params = new URLSearchParams();
+
+    // Add vault parameter(s)
+    if (currentVault === null) {
+        // No vault param = all vaults
+    } else if (Array.isArray(currentVault)) {
+        currentVault.forEach(v => params.append('vault', v));
+    } else {
+        params.set('vault', currentVault);
+    }
+
+    // Add assignee if set
+    if (currentAssignee) {
+        params.set('assignee', currentAssignee);
+    }
+
+    // Update URL without reload
+    const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    window.history.replaceState({}, '', newURL);
 }
 
 function setupDragAndDrop() {
@@ -88,16 +170,18 @@ async function handleDrop(e) {
     e.preventDefault();
     e.currentTarget.classList.remove('drag-over');
 
-    if (!currentVault) {
-        alert('No vault selected');
+    const taskId = e.dataTransfer.getData('text/plain');
+    const task = tasksCache[taskId];
+
+    if (!task) {
+        alert('Task not found');
         return;
     }
 
-    const taskId = e.dataTransfer.getData('text/plain');
     const newPhase = e.currentTarget.id.replace('cards-', '');
 
     try {
-        const response = await fetch(`/api/tasks/${taskId}/phase?vault=${encodeURIComponent(currentVault)}`, {
+        const response = await fetch(`/api/tasks/${taskId}/phase?vault=${encodeURIComponent(task.vault)}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -119,13 +203,30 @@ async function handleDrop(e) {
 }
 
 async function loadTasks() {
-    if (!currentVault) {
-        return;
-    }
-
     try {
-        // Fetch in_progress tasks with all phases
-        const response = await fetch(`/api/tasks?vault=${encodeURIComponent(currentVault)}&status=in_progress&phase=todo,planning,in_progress,ai_review,human_review,done`);
+        // Build API URL
+        const params = new URLSearchParams();
+
+        // Add vault parameter(s)
+        if (currentVault === null) {
+            // No vault param = all vaults
+        } else if (Array.isArray(currentVault)) {
+            currentVault.forEach(v => params.append('vault', v));
+        } else {
+            params.set('vault', currentVault);
+        }
+
+        // Add other filters
+        params.set('status', 'in_progress');
+        params.set('phase', 'todo,planning,in_progress,ai_review,human_review,done');
+
+        // Add assignee if set
+        if (currentAssignee) {
+            params.set('assignee', currentAssignee);
+        }
+
+        // Fetch tasks
+        const response = await fetch(`/api/tasks?${params.toString()}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -226,9 +327,10 @@ function createTaskCard(task) {
            </a>`
         : '';
 
-    // Assignee badge (if present)
+    // Assignee badge (if present) - clickable to filter
+    const isActiveFilter = currentAssignee === task.assignee;
     const assigneeBadge = task.assignee
-        ? `<span class="assignee-badge" title="Assigned to ${escapeHtml(task.assignee)}">
+        ? `<span class="assignee-badge clickable ${isActiveFilter ? 'active' : ''}" onclick="filterByAssignee('${escapeHtml(task.assignee)}')" title="${isActiveFilter ? 'Clear filter' : 'Filter by ' + escapeHtml(task.assignee)}">
              <span class="assignee-icon">👤</span><span>${escapeHtml(task.assignee)}</span>
            </span>`
         : '';
@@ -258,11 +360,6 @@ function createTaskCard(task) {
 }
 
 async function runTask(taskId) {
-    if (!currentVault) {
-        alert('No vault selected');
-        return;
-    }
-
     // Look up task from cache
     const task = tasksCache[taskId];
     if (!task) {
@@ -282,7 +379,7 @@ async function runTask(taskId) {
             // Get vault config to build command
             const vaultsResponse = await fetch('/api/vaults');
             const vaults = await vaultsResponse.json();
-            const vaultConfig = vaults.find(v => v.name === currentVault);
+            const vaultConfig = vaults.find(v => v.name === task.vault);
 
             if (!vaultConfig) {
                 throw new Error('Vault not found');
@@ -299,7 +396,7 @@ async function runTask(taskId) {
 
         // Create new Claude session
         button.textContent = '⏳ Starting...';
-        const response = await fetch(`/api/tasks/${taskId}/run?vault=${encodeURIComponent(currentVault)}`, {
+        const response = await fetch(`/api/tasks/${taskId}/run?vault=${encodeURIComponent(task.vault)}`, {
             method: 'POST'
         });
 
@@ -505,8 +602,9 @@ function closeMenu() {
 }
 
 async function handleMenuAction(taskId, action) {
-    if (!currentVault) {
-        alert('No vault selected');
+    const task = tasksCache[taskId];
+    if (!task) {
+        alert('Task not found');
         return;
     }
 
@@ -520,7 +618,7 @@ async function handleMenuAction(taskId, action) {
     } else {
         // Move to phase
         try {
-            const response = await fetch(`/api/tasks/${taskId}/phase?vault=${encodeURIComponent(currentVault)}`, {
+            const response = await fetch(`/api/tasks/${taskId}/phase?vault=${encodeURIComponent(task.vault)}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -542,6 +640,12 @@ async function handleMenuAction(taskId, action) {
 }
 
 async function executeSlashCommand(taskId, commandType) {
+    const task = tasksCache[taskId];
+    if (!task) {
+        alert('Task not found');
+        return;
+    }
+
     // Show loading modal
     const loadingModal = document.getElementById('loading-modal');
     loadingModal.classList.remove('hidden');
@@ -564,7 +668,7 @@ async function executeSlashCommand(taskId, commandType) {
 
         // Call backend endpoint
         const response = await fetch(
-            `/api/tasks/${encodeURIComponent(taskId)}/execute-command?vault=${encodeURIComponent(currentVault)}`,
+            `/api/tasks/${encodeURIComponent(taskId)}/execute-command?vault=${encodeURIComponent(task.vault)}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -600,8 +704,14 @@ async function executeSlashCommand(taskId, commandType) {
 }
 
 async function clearTaskSession(taskId) {
+    const task = tasksCache[taskId];
+    if (!task) {
+        alert('Task not found');
+        return;
+    }
+
     try {
-        const response = await fetch(`/api/tasks/${taskId}/session?vault=${encodeURIComponent(currentVault)}`, {
+        const response = await fetch(`/api/tasks/${taskId}/session?vault=${encodeURIComponent(task.vault)}`, {
             method: 'DELETE',
         });
 
@@ -656,9 +766,13 @@ function connectWebSocket() {
 function handleTaskUpdate(data) {
     const { type, task_id, vault } = data;
 
-    // Ignore updates for other vaults
-    if (vault !== currentVault) {
-        console.log(`Ignoring update for vault ${vault} (current: ${currentVault})`);
+    // Check if update is for a vault we're displaying
+    const shouldUpdate = currentVault === null || // All vaults
+                         currentVault === vault || // Single vault match
+                         (Array.isArray(currentVault) && currentVault.includes(vault)); // Multiple vaults
+
+    if (!shouldUpdate) {
+        console.log(`Ignoring update for vault ${vault} (current: ${JSON.stringify(currentVault)})`);
         return;
     }
 

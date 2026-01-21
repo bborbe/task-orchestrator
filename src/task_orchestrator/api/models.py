@@ -49,6 +49,7 @@ class TaskResponse(BaseModel):
     recurring: str | None
     claude_session_id: str | None
     assignee: str | None
+    vault: str  # Vault name this task belongs to
 
 
 class SessionResponse(BaseModel):

@@ -292,6 +292,21 @@ h1 {
     white-space: nowrap;
 }
 
+.assignee-badge.clickable {
+    cursor: pointer;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.assignee-badge.clickable:hover {
+    opacity: 0.8;
+    background-color: rgba(100, 100, 255, 0.15);
+}
+
+.assignee-badge.clickable.active {
+    background-color: rgba(100, 100, 255, 0.3);
+    font-weight: 600;
+}
+
 .assignee-icon {
     font-size: 0.875rem;
     line-height: 1;

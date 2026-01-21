@@ -8,6 +8,16 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.0
+- Add multi-vault support with "All" option in dropdown
+- Add URL parameter filtering for vault (supports multiple `?vault=X&vault=Y`)
+- Add assignee URL parameter filtering (`?assignee=name`)
+- Add clickable assignee badges to filter tasks by assignee
+- Add vault field to TaskResponse model for proper task identification
+- Add 5 comprehensive tests for vault and assignee filtering
+- Fix phase filtering to only show tasks without phase in todo column
+- Improve WebSocket updates to handle multi-vault filtering
+
 ## v0.3.0
 - Add slash command execution API endpoint with success/failure parsing
 - Add loading modal with spinner and close button for command execution

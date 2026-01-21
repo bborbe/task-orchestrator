@@ -161,7 +161,9 @@ Test task with status: {status_input}
         task_file.write_text(content)
 
         task = reader.read_task(f"Task{idx}")
-        assert task.status == expected, f"Status '{status_input}' should normalize to '{expected}', got '{task.status}'"
+        assert task.status == expected, (
+            f"Status '{status_input}' should normalize to '{expected}', got '{task.status}'"
+        )
 
 
 def test_normalize_status_preserves_other_statuses(tmp_vault: Path) -> None:

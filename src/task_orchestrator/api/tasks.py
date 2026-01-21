@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from task_orchestrator.api.models import SessionResponse, Task, TaskResponse
@@ -77,25 +77,28 @@ async def list_vaults() -> list[VaultResponse]:
 
 @router.get("/tasks", response_model=list[TaskResponse])
 async def list_tasks(
-    vault: str,
+    vault: list[str] | None = Query(None),
     status: str | None = None,
     phase: str | None = None,
+    assignee: str | None = None,
 ) -> list[TaskResponse]:
-    """List tasks from Obsidian vault.
+    """List tasks from Obsidian vault(s).
 
     Args:
-        vault: Vault name to read from
+        vault: Vault name(s) to read from. If empty/None, reads from all vaults.
         status: Comma-separated list of statuses to filter (e.g. "in_progress,todo")
         phase: Comma-separated list of phases to filter (e.g. "planning,implementation")
+        assignee: Filter by assignee name
 
     Returns:
         List of tasks matching the filter
     """
-    try:
-        reader = get_task_reader_for_vault(vault)
-        vault_config = get_vault_config(vault)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    # If no vault specified, get all vaults
+    config = get_config()
+    if not vault or len(vault) == 0:
+        vault_names = [v.name for v in config.vaults]
+    else:
+        vault_names = vault
 
     # Parse status filter
     status_filter: list[str] | None = None
@@ -107,19 +110,41 @@ async def list_tasks(
     if phase:
         phase_filter = [s.strip() for s in phase.split(",")]
 
-    # Get tasks
-    tasks = reader.list_tasks(status_filter=status_filter)
+    # Collect tasks from all specified vaults
+    all_tasks: list[TaskResponse] = []
+    for vault_name in vault_names:
+        try:
+            reader = get_task_reader_for_vault(vault_name)
+            vault_config = get_vault_config(vault_name)
+        except ValueError:
+            # Skip invalid vaults
+            continue
 
-    # Filter by phase if specified (include tasks with None phase)
-    if phase_filter:
-        tasks = [t for t in tasks if t.phase in phase_filter or t.phase is None]
+        # Get tasks
+        tasks = reader.list_tasks(status_filter=status_filter)
 
-    # Filter out deferred tasks (defer_date in future)
-    today = date.today()
-    tasks = [t for t in tasks if t.defer_date is None or date.fromisoformat(t.defer_date) <= today]
+        # Filter by phase if specified (tasks with None phase only in todo)
+        if phase_filter:
+            tasks = [
+                t
+                for t in tasks
+                if t.phase in phase_filter or (t.phase is None and "todo" in phase_filter)
+            ]
 
-    # Convert to response models
-    return [_task_to_response(task, vault_config) for task in tasks]
+        # Filter by assignee if specified
+        if assignee:
+            tasks = [t for t in tasks if t.assignee == assignee]
+
+        # Filter out deferred tasks (defer_date in future)
+        today = date.today()
+        tasks = [
+            t for t in tasks if t.defer_date is None or date.fromisoformat(t.defer_date) <= today
+        ]
+
+        # Convert to response models
+        all_tasks.extend([_task_to_response(task, vault_config) for task in tasks])
+
+    return all_tasks
 
 
 @router.post("/tasks/{task_id}/run", response_model=SessionResponse)
@@ -208,7 +233,9 @@ async def execute_slash_command(
     Returns:
         Session information with resume command
     """
-    logger.info(f"execute_slash_command: vault={vault}, task_id={task_id}, command={request.command}")
+    logger.info(
+        f"execute_slash_command: vault={vault}, task_id={task_id}, command={request.command}"
+    )
 
     if not _session_manager:
         raise HTTPException(status_code=500, detail="Session manager not initialized")
@@ -249,6 +276,7 @@ async def execute_slash_command(
         # Parse response for success/failure
         import json
         import re
+
         success = None
         error_message = None
 
@@ -371,4 +399,5 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         recurring=task.recurring,
         claude_session_id=task.claude_session_id,
         assignee=task.assignee,
+        vault=vault_config.name,
     )

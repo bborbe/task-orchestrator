@@ -151,3 +151,350 @@ Task deferred until May.
     # Deferred task should not be in results
     task_ids = [t["id"] for t in tasks]
     assert "Deferred Task" not in task_ids
+
+
+def test_list_tasks_no_vault_returns_all_vaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test GET /api/tasks with no vault parameter returns tasks from all vaults."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from task_orchestrator.config import VaultConfig
+
+    # Create two test vaults
+    vault1 = tmp_path / "vault1"
+    vault1_tasks = vault1 / "24 Tasks"
+    vault1_tasks.mkdir(parents=True)
+
+    vault2 = tmp_path / "vault2"
+    vault2_tasks = vault2 / "24 Tasks"
+    vault2_tasks.mkdir(parents=True)
+
+    # Create task in vault1
+    task1 = vault1_tasks / "Task1.md"
+    task1.write_text("""---
+status: in_progress
+---
+Task in vault 1
+""")
+
+    # Create task in vault2
+    task2 = vault2_tasks / "Task2.md"
+    task2.write_text("""---
+status: in_progress
+---
+Task in vault 2
+""")
+
+    # Create test config with two vaults
+    test_config = Config(
+        vaults=[
+            VaultConfig(
+                name="Vault1",
+                vault_path=str(vault1),
+                vault_name="Vault1",
+                tasks_folder="24 Tasks",
+            ),
+            VaultConfig(
+                name="Vault2",
+                vault_path=str(vault2),
+                vault_name="Vault2",
+                tasks_folder="24 Tasks",
+            ),
+        ],
+        claude_cli="claude",
+        host="127.0.0.1",
+        port=8000,
+    )
+
+    # Override factory config
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    # Mock session manager
+    mock_session_manager = MagicMock()
+    mock_session_manager.send_prompt = AsyncMock(
+        return_value=("test-session-id", "Mocked response")
+    )
+    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
+
+    # Create app
+    app = create_app()
+    client = TestClient(app)
+
+    # Request without vault parameter
+    response = client.get("/api/tasks")
+
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should contain tasks from both vaults
+    assert "Task1" in task_ids
+    assert "Task2" in task_ids
+    assert len(task_ids) >= 2
+
+
+def test_list_tasks_single_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test GET /api/tasks with single vault parameter."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from task_orchestrator.config import VaultConfig
+
+    # Create two test vaults
+    vault1 = tmp_path / "vault1"
+    vault1_tasks = vault1 / "24 Tasks"
+    vault1_tasks.mkdir(parents=True)
+
+    vault2 = tmp_path / "vault2"
+    vault2_tasks = vault2 / "24 Tasks"
+    vault2_tasks.mkdir(parents=True)
+
+    # Create task in vault1
+    task1 = vault1_tasks / "Task1.md"
+    task1.write_text("""---
+status: in_progress
+---
+Task in vault 1
+""")
+
+    # Create task in vault2
+    task2 = vault2_tasks / "Task2.md"
+    task2.write_text("""---
+status: in_progress
+---
+Task in vault 2
+""")
+
+    # Create test config with two vaults
+    test_config = Config(
+        vaults=[
+            VaultConfig(
+                name="Vault1",
+                vault_path=str(vault1),
+                vault_name="Vault1",
+                tasks_folder="24 Tasks",
+            ),
+            VaultConfig(
+                name="Vault2",
+                vault_path=str(vault2),
+                vault_name="Vault2",
+                tasks_folder="24 Tasks",
+            ),
+        ],
+        claude_cli="claude",
+        host="127.0.0.1",
+        port=8000,
+    )
+
+    # Override factory config
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    # Mock session manager
+    mock_session_manager = MagicMock()
+    mock_session_manager.send_prompt = AsyncMock(
+        return_value=("test-session-id", "Mocked response")
+    )
+    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
+
+    # Create app
+    app = create_app()
+    client = TestClient(app)
+
+    # Request with vault=Vault1
+    response = client.get("/api/tasks?vault=Vault1")
+
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should only contain task from Vault1
+    assert "Task1" in task_ids
+    assert "Task2" not in task_ids
+
+
+def test_list_tasks_multiple_vaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test GET /api/tasks with multiple vault parameters."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from task_orchestrator.config import VaultConfig
+
+    # Create three test vaults
+    vault1 = tmp_path / "vault1"
+    vault1_tasks = vault1 / "24 Tasks"
+    vault1_tasks.mkdir(parents=True)
+
+    vault2 = tmp_path / "vault2"
+    vault2_tasks = vault2 / "24 Tasks"
+    vault2_tasks.mkdir(parents=True)
+
+    vault3 = tmp_path / "vault3"
+    vault3_tasks = vault3 / "24 Tasks"
+    vault3_tasks.mkdir(parents=True)
+
+    # Create tasks
+    task1 = vault1_tasks / "Task1.md"
+    task1.write_text("""---
+status: in_progress
+---
+Task in vault 1
+""")
+
+    task2 = vault2_tasks / "Task2.md"
+    task2.write_text("""---
+status: in_progress
+---
+Task in vault 2
+""")
+
+    task3 = vault3_tasks / "Task3.md"
+    task3.write_text("""---
+status: in_progress
+---
+Task in vault 3
+""")
+
+    # Create test config
+    test_config = Config(
+        vaults=[
+            VaultConfig(
+                name="Vault1",
+                vault_path=str(vault1),
+                vault_name="Vault1",
+                tasks_folder="24 Tasks",
+            ),
+            VaultConfig(
+                name="Vault2",
+                vault_path=str(vault2),
+                vault_name="Vault2",
+                tasks_folder="24 Tasks",
+            ),
+            VaultConfig(
+                name="Vault3",
+                vault_path=str(vault3),
+                vault_name="Vault3",
+                tasks_folder="24 Tasks",
+            ),
+        ],
+        claude_cli="claude",
+        host="127.0.0.1",
+        port=8000,
+    )
+
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    mock_session_manager = MagicMock()
+    mock_session_manager.send_prompt = AsyncMock(
+        return_value=("test-session-id", "Mocked response")
+    )
+    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
+
+    app = create_app()
+    client = TestClient(app)
+
+    # Request with vault=Vault1&vault=Vault2
+    response = client.get("/api/tasks?vault=Vault1&vault=Vault2")
+
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should contain tasks from Vault1 and Vault2, but not Vault3
+    assert "Task1" in task_ids
+    assert "Task2" in task_ids
+    assert "Task3" not in task_ids
+
+
+def test_list_tasks_with_assignee_filter(test_client: TestClient, tmp_vault: Path) -> None:
+    """Test GET /api/tasks with assignee filter."""
+    # Create tasks with different assignees
+    tasks_dir = tmp_vault / "24 Tasks"
+
+    task1 = tasks_dir / "Task Assigned to Alice.md"
+    task1.write_text("""---
+status: in_progress
+assignee: alice
+---
+Task for Alice
+""")
+
+    task2 = tasks_dir / "Task Assigned to Bob.md"
+    task2.write_text("""---
+status: in_progress
+assignee: bob
+---
+Task for Bob
+""")
+
+    task3 = tasks_dir / "Task Unassigned.md"
+    task3.write_text("""---
+status: in_progress
+---
+Task without assignee
+""")
+
+    # Filter by assignee=alice
+    response = test_client.get("/api/tasks?vault=TestVault&assignee=alice")
+
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should only contain Alice's task
+    assert "Task Assigned to Alice" in task_ids
+    assert "Task Assigned to Bob" not in task_ids
+    assert "Task Unassigned" not in task_ids
+
+
+def test_list_tasks_phase_filter_none_only_in_todo(
+    test_client: TestClient, tmp_vault: Path
+) -> None:
+    """Test that tasks with None phase only appear when filtering for todo."""
+    tasks_dir = tmp_vault / "24 Tasks"
+
+    # Task with no phase
+    task_no_phase = tasks_dir / "Task Without Phase.md"
+    task_no_phase.write_text("""---
+status: in_progress
+---
+Task without phase field
+""")
+
+    # Task with todo phase
+    task_todo = tasks_dir / "Task Todo.md"
+    task_todo.write_text("""---
+status: in_progress
+phase: todo
+---
+Task in todo
+""")
+
+    # Task with in_progress phase
+    task_in_progress = tasks_dir / "Task In Progress.md"
+    task_in_progress.write_text("""---
+status: in_progress
+phase: in_progress
+---
+Task in progress
+""")
+
+    # Filter by phase=todo
+    response = test_client.get("/api/tasks?vault=TestVault&phase=todo")
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should include both None phase and todo phase
+    assert "Task Without Phase" in task_ids
+    assert "Task Todo" in task_ids
+    assert "Task In Progress" not in task_ids
+
+    # Filter by phase=in_progress
+    response = test_client.get("/api/tasks?vault=TestVault&phase=in_progress")
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Should NOT include None phase, only in_progress
+    assert "Task Without Phase" not in task_ids
+    assert "Task Todo" not in task_ids
+    assert "Task In Progress" in task_ids
