@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.1
+- Fix phase filtering to include tasks with invalid phase values (defaults to todo)
+- Add test for tasks with defer_date=today inclusion
+- Add test for invalid phase handling (phase: banana)
+- Add test documenting status/phase mismatch behavior
+
 ## v0.4.0
 - Add multi-vault support with "All" option in dropdown
 - Add URL parameter filtering for vault (supports multiple `?vault=X&vault=Y`)

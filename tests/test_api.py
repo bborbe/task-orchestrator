@@ -153,6 +153,36 @@ Task deferred until May.
     assert "Deferred Task" not in task_ids
 
 
+def test_list_tasks_includes_defer_date_today(test_client: TestClient, tmp_vault: Path) -> None:
+    """Test that tasks with defer_date=today ARE included."""
+    from datetime import date
+
+    # Create task deferred until today
+    tasks_dir = tmp_vault / "24 Tasks"
+    task_file = tasks_dir / "Task Due Today.md"
+
+    today = date.today().isoformat()
+    content = f"""---
+status: in_progress
+phase: todo
+defer_date: {today}
+---
+
+Task due today should appear.
+"""
+
+    task_file.write_text(content)
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+
+    assert response.status_code == 200
+    tasks = response.json()
+
+    # Task with defer_date=today SHOULD be in results
+    task_ids = [t["id"] for t in tasks]
+    assert "Task Due Today" in task_ids
+
+
 def test_list_tasks_no_vault_returns_all_vaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -498,3 +528,63 @@ Task in progress
     assert "Task Without Phase" not in task_ids
     assert "Task Todo" not in task_ids
     assert "Task In Progress" in task_ids
+
+
+def test_list_tasks_invalid_phase_treated_as_todo(test_client: TestClient, tmp_vault: Path) -> None:
+    """Test that tasks with invalid phase values are treated like None phase (default to todo)."""
+    tasks_dir = tmp_vault / "24 Tasks"
+
+    # Task with invalid phase
+    task_invalid = tasks_dir / "Task Invalid Phase.md"
+    task_invalid.write_text("""---
+status: in_progress
+phase: banana
+---
+Task with invalid phase
+""")
+
+    # Filter by phase=todo (should include invalid phases)
+    response = test_client.get("/api/tasks?vault=TestVault&phase=todo")
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+
+    # Invalid phase should be treated like None phase and included in todo filter
+    assert "Task Invalid Phase" in task_ids
+
+
+def test_list_tasks_warns_on_status_phase_mismatch(
+    test_client: TestClient, tmp_vault: Path
+) -> None:
+    """Test that tasks with status=in_progress but phase=null are still returned.
+
+    This is a data quality issue (not a code bug), but we document the behavior:
+    - Backend returns the task (correct)
+    - Frontend will place it in 'todo' column (phase defaults to todo)
+    - User expects it in 'in_progress' column (based on status)
+
+    Proper fix: Ensure phase field matches status in task files.
+    """
+    tasks_dir = tmp_vault / "24 Tasks"
+
+    # Task with status=in_progress but no phase field
+    task_no_phase = tasks_dir / "Task Status Phase Mismatch.md"
+    task_no_phase.write_text("""---
+status: in_progress
+---
+Task with status in_progress but no phase field
+""")
+
+    # Request with phase filter that includes todo
+    response = test_client.get("/api/tasks?vault=TestVault&status=in_progress&phase=todo")
+    assert response.status_code == 200
+    tasks = response.json()
+
+    # Task should be returned (null phase defaults to todo)
+    task_ids = [t["id"] for t in tasks]
+    assert "Task Status Phase Mismatch" in task_ids
+
+    # Verify the task has null phase (will appear in todo column on frontend)
+    task = next(t for t in tasks if t["id"] == "Task Status Phase Mismatch")
+    assert task["status"] == "in_progress"
+    assert task["phase"] is None  # Frontend will default this to 'todo'

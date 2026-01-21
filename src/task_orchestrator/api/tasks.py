@@ -4,7 +4,7 @@
 
 import logging
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query
@@ -77,7 +77,7 @@ async def list_vaults() -> list[VaultResponse]:
 
 @router.get("/tasks", response_model=list[TaskResponse])
 async def list_tasks(
-    vault: list[str] | None = Query(None),
+    vault: Annotated[list[str] | None, Query()] = None,
     status: str | None = None,
     phase: str | None = None,
     assignee: str | None = None,
@@ -95,10 +95,7 @@ async def list_tasks(
     """
     # If no vault specified, get all vaults
     config = get_config()
-    if not vault or len(vault) == 0:
-        vault_names = [v.name for v in config.vaults]
-    else:
-        vault_names = vault
+    vault_names = [v.name for v in config.vaults] if not vault or len(vault) == 0 else vault
 
     # Parse status filter
     status_filter: list[str] | None = None
@@ -123,12 +120,14 @@ async def list_tasks(
         # Get tasks
         tasks = reader.list_tasks(status_filter=status_filter)
 
-        # Filter by phase if specified (tasks with None phase only in todo)
+        # Filter by phase if specified (tasks with None/invalid phase default to todo)
         if phase_filter:
+            valid_phases = ["todo", "planning", "in_progress", "ai_review", "human_review", "done"]
             tasks = [
                 t
                 for t in tasks
-                if t.phase in phase_filter or (t.phase is None and "todo" in phase_filter)
+                if (t.phase in valid_phases and t.phase in phase_filter)
+                or (t.phase not in valid_phases and "todo" in phase_filter)
             ]
 
         # Filter by assignee if specified
@@ -255,11 +254,18 @@ async def execute_slash_command(
 
         # Send slash command directly - they load task context themselves
         # Calculate tomorrow for defer-task command
+        success_msg = '{{"success":true}} or {{"success":false,"error":"reason"}}'
         if request.command == "defer-task":
             tomorrow = (date.today() + timedelta(days=1)).isoformat()
-            prompt = f'/{request.command} "{task_file_path}" {tomorrow}\n\nWhen finished, respond with only: {{"success":true}} or {{"success":false,"error":"reason"}}'
+            prompt = (
+                f'/{request.command} "{task_file_path}" {tomorrow}\n\n'
+                f"When finished, respond with only: {success_msg}"
+            )
         elif request.command == "complete-task":
-            prompt = f'/{request.command} "{task_file_path}"\n\nWhen finished, respond with only: {{"success":true}} or {{"success":false,"error":"reason"}}'
+            prompt = (
+                f'/{request.command} "{task_file_path}"\n\n'
+                f"When finished, respond with only: {success_msg}"
+            )
         else:
             prompt = f'/{request.command} "{task_file_path}"'
 
