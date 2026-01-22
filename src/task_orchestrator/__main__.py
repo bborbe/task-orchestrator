@@ -12,8 +12,6 @@ from task_orchestrator.factory import (
     create_app,
     get_config,
     get_connection_manager,
-    start_task_watchers,
-    stop_task_watchers,
 )
 
 # Create session manager
@@ -27,21 +25,6 @@ set_session_manager(session_manager)
 
 # Inject connection manager into WebSocket routes
 set_connection_manager(get_connection_manager())
-
-
-# Lifecycle events
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Initialize watchers on application startup."""
-    logging.info("[Main] Starting task watchers...")
-    start_task_watchers()
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Clean up watchers on application shutdown."""
-    logging.info("[Main] Stopping task watchers...")
-    stop_task_watchers()
 
 
 def main() -> int:

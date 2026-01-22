@@ -8,6 +8,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.3
+- Use `--tool` flag for slash commands (machine-readable JSON output)
+- Set phase to `human_review` on command failure
+- Add create-task command support
+- Migrate from deprecated on_event to lifespan context manager
+- Fix loading modal dismiss not preventing session modal popup
+
 ## v0.4.2
 - Add fallback polling every 60 seconds in case WebSocket misses updates
 

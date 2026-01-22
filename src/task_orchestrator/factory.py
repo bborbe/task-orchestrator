@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
@@ -127,6 +128,18 @@ def stop_task_watchers() -> None:
     _watchers.clear()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Manage application lifecycle - startup and shutdown."""
+    logger.info("[Lifespan] Starting task watchers...")
+    start_task_watchers()
+    try:
+        yield
+    finally:
+        logger.info("[Lifespan] Stopping task watchers...")
+        stop_task_watchers()
+
+
 def create_app() -> FastAPI:
     """Create FastAPI application (composition root)."""
     from task_orchestrator.api.tasks import router as tasks_router
@@ -136,6 +149,7 @@ def create_app() -> FastAPI:
         title="TaskOrchestrator",
         description="Orchestrate Claude Code sessions from Obsidian tasks",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # Mount API routes

@@ -475,6 +475,38 @@ function closeModal() {
     document.getElementById('session-modal').classList.add('hidden');
 }
 
+function updateModal(sessionId, command, workingDir, executedCommand = null, success = null, error = null) {
+    // Only update if modal is already visible
+    const modal = document.getElementById('session-modal');
+    if (modal.classList.contains('hidden')) {
+        return;
+    }
+
+    document.getElementById('session-id').textContent = sessionId;
+    document.getElementById('handoff-command').textContent = command;
+
+    if (executedCommand) {
+        document.getElementById('executed-command').textContent = executedCommand;
+    } else {
+        document.getElementById('executed-command').textContent = '/work-on-task';
+    }
+
+    const statusMessage = document.getElementById('status-message');
+    if (success === true) {
+        statusMessage.textContent = '✓ Command completed successfully';
+        statusMessage.style.backgroundColor = '#d4edda';
+        statusMessage.style.color = '#155724';
+        statusMessage.style.display = 'block';
+    } else if (success === false) {
+        statusMessage.textContent = '✗ Command failed' + (error ? ': ' + error : '');
+        statusMessage.style.backgroundColor = '#f8d7da';
+        statusMessage.style.color = '#721c24';
+        statusMessage.style.display = 'block';
+    } else {
+        statusMessage.style.display = 'none';
+    }
+}
+
 async function copyCommand() {
     const command = document.getElementById('handoff-command').textContent;
 
@@ -661,9 +693,13 @@ async function executeSlashCommand(taskId, commandType) {
     const loadingModal = document.getElementById('loading-modal');
     loadingModal.classList.remove('hidden');
 
+    // Track if user dismissed loading modal
+    let userDismissed = false;
+
     // Setup close button handler
     const closeBtn = document.getElementById('close-loading-btn');
     const closeHandler = () => {
+        userDismissed = true;
         loadingModal.classList.add('hidden');
         closeBtn.removeEventListener('click', closeHandler);
     };
@@ -699,8 +735,10 @@ async function executeSlashCommand(taskId, commandType) {
         // Hide loading modal
         loadingModal.classList.add('hidden');
 
-        // Show modal with resume command and success/error status
-        showModal(data.session_id, data.command, data.working_dir, data.executed_command, data.success, data.error);
+        // Only show session modal if user didn't dismiss loading modal
+        if (!userDismissed) {
+            showModal(data.session_id, data.command, data.working_dir, data.executed_command, data.success, data.error);
+        }
 
     } catch (error) {
         // Cleanup
