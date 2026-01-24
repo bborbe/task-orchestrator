@@ -14,6 +14,7 @@ from task_orchestrator.claude.executor import ClaudeCodeExecutor, ClaudeExecutor
 from task_orchestrator.config import Config, VaultConfig
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
+from task_orchestrator.status_cache import StatusCache
 from task_orchestrator.websocket.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ _config: Config | None = None
 # Global connection manager and watchers
 _connection_manager: ConnectionManager | None = None
 _watchers: dict[str, TaskWatcher] = {}
+_status_cache: StatusCache | None = None
 
 
 def get_config() -> Config:
@@ -80,11 +82,20 @@ def get_connection_manager() -> ConnectionManager:
     return _connection_manager
 
 
+def get_status_cache() -> StatusCache:
+    """Get or create StatusCache singleton."""
+    global _status_cache
+    if _status_cache is None:
+        _status_cache = StatusCache()
+    return _status_cache
+
+
 def start_task_watchers() -> None:
-    """Start file watchers for all configured vaults."""
+    """Start file watchers for all configured vaults (21-24 folders)."""
     global _watchers
     config = get_config()
     connection_manager = get_connection_manager()
+    cache = get_status_cache()
 
     # Get the running event loop to schedule coroutines from threads
     try:
@@ -93,27 +104,48 @@ def start_task_watchers() -> None:
         logger.error("[Factory] No running event loop found")
         return
 
+    # Watch ALL hierarchy folders (not just tasks)
+    folders_to_watch = ["21 Themes", "22 Objectives", "23 Goals", "24 Tasks"]
+
     for vault in config.vaults:
-        try:
-            reader = get_task_reader_for_vault(vault.name)
-            watcher = TaskWatcher(reader.tasks_dir, vault.name)
+        vault_path = Path(vault.vault_path)
 
-            # Wire callback to broadcast via connection manager
-            def make_callback(vault_name: str) -> Callable[[str, str, str], None]:
-                def callback(event_type: str, task_id: str, vault_arg: str) -> None:
-                    # Schedule async broadcast from thread using run_coroutine_threadsafe
-                    message = {"type": event_type, "task_id": task_id, "vault": vault_arg}
-                    asyncio.run_coroutine_threadsafe(connection_manager.broadcast(message), loop)
+        for folder in folders_to_watch:
+            folder_path = vault_path / folder
+            if not folder_path.exists():
+                logger.warning(f"[Factory] Folder not found: {folder_path}")
+                continue
 
-                return callback
+            try:
+                watcher = TaskWatcher(folder_path, vault.name)
 
-            watcher.set_callback(make_callback(vault.name))
-            watcher.start(background=True)
-            _watchers[vault.name] = watcher
-            logger.info(f"[Factory] Started watcher for vault: {vault.name}")
+                # Wire callback to invalidate cache AND broadcast
+                def make_callback(vault_name: str) -> Callable[[str, str, str], None]:
+                    def callback(event_type: str, item_id: str, vault_arg: str) -> None:
+                        # Invalidate cache
+                        cache.invalidate(vault_arg, item_id)
 
-        except Exception as e:
-            logger.error(f"[Factory] Failed to start watcher for {vault.name}: {e}", exc_info=True)
+                        # Broadcast to UI clients
+                        message = {"type": event_type, "task_id": item_id, "vault": vault_arg}
+                        asyncio.run_coroutine_threadsafe(
+                            connection_manager.broadcast(message), loop
+                        )
+
+                    return callback
+
+                watcher.set_callback(make_callback(vault.name))
+                watcher.start(background=True)
+
+                # Use unique key per folder
+                watcher_key = f"{vault.name}:{folder}"
+                _watchers[watcher_key] = watcher
+                logger.info(f"[Factory] Watching {folder} for {vault.name}")
+
+            except Exception as e:
+                logger.error(
+                    f"[Factory] Failed to start watcher for {folder} in {vault.name}: {e}",
+                    exc_info=True,
+                )
 
 
 def stop_task_watchers() -> None:
@@ -131,6 +163,14 @@ def stop_task_watchers() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application lifecycle - startup and shutdown."""
+    # Populate status cache before starting watchers
+    logger.info("[Lifespan] Loading status cache...")
+    cache = get_status_cache()
+    config = get_config()
+    for vault in config.vaults:
+        vault_path = Path(vault.vault_path)
+        cache.load_vault(vault.name, vault_path)
+
     logger.info("[Lifespan] Starting task watchers...")
     start_task_watchers()
     try:

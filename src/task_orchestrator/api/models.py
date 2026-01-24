@@ -28,6 +28,7 @@ class Task:
     recurring: str | None  # From frontmatter: daily, weekly, monthly
     claude_session_id: str | None  # From frontmatter: Claude Code session UUID
     assignee: str | None  # From frontmatter: Person assigned to the task
+    blocked_by: list[str] | None  # From frontmatter: List of blocking task wikilinks
 
 
 class TaskResponse(BaseModel):
@@ -49,6 +50,7 @@ class TaskResponse(BaseModel):
     recurring: str | None
     claude_session_id: str | None
     assignee: str | None
+    blocked_by: list[str] | None
     vault: str  # Vault name this task belongs to
 
 

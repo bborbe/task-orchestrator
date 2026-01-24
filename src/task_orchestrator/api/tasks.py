@@ -140,6 +140,42 @@ async def list_tasks(
             t for t in tasks if t.defer_date is None or date.fromisoformat(t.defer_date) <= today
         ]
 
+        # Filter out blocked tasks (use cache for fast lookup)
+        from task_orchestrator.factory import get_status_cache
+
+        cache = get_status_cache()
+        unblocked_tasks = []
+
+        for task in tasks:
+            if not task.blocked_by:
+                # No blockers, include task
+                unblocked_tasks.append(task)
+                continue
+
+            # Check if all blockers are completed
+            has_uncompleted_blocker = False
+            for blocker_wikilink in task.blocked_by:
+                # Extract item name from wikilink [[Item Name]]
+                blocker_name = blocker_wikilink.strip("[]").strip()
+
+                # Fast cache lookup (O(1) dict access, no disk I/O)
+                blocker_status = cache.get_status(vault_config.name, blocker_name)
+
+                # If not found in cache, assume deleted/completed - don't block
+                if blocker_status is None:
+                    continue
+
+                # Hide only if blocker exists and is NOT completed
+                if blocker_status != "completed":
+                    has_uncompleted_blocker = True
+                    break
+
+            if not has_uncompleted_blocker:
+                # All blockers completed (or not found), include task
+                unblocked_tasks.append(task)
+
+        tasks = unblocked_tasks
+
         # Convert to response models
         all_tasks.extend([_task_to_response(task, vault_config) for task in tasks])
 
@@ -382,6 +418,50 @@ async def clear_task_session(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.post("/cache/reload")
+async def reload_cache(vault: str | None = None) -> dict:
+    """Force cache reload for debugging/recovery.
+
+    Args:
+        vault: Optional vault name to reload. If None, reloads all vaults.
+
+    Returns:
+        {"reloaded": ["Personal", "Brogrammers"], "counts": {"Personal": 234, ...}}
+
+    Raises:
+        HTTPException: If vault not found
+    """
+    from pathlib import Path
+
+    from task_orchestrator.factory import get_config, get_status_cache
+
+    cache = get_status_cache()
+    config = get_config()
+
+    if vault:
+        # Reload single vault
+        vault_config = config.get_vault(vault)
+        if not vault_config:
+            raise HTTPException(status_code=404, detail=f"Unknown vault: {vault}")
+
+        vault_path = Path(vault_config.vault_path)
+        cache.load_vault(vault, vault_path)
+        count = len(cache._cache.get(vault, {}))
+        return {"reloaded": [vault], "counts": {vault: count}}
+
+    # Reload all vaults
+    reloaded = []
+    counts = {}
+    for vault_config in config.vaults:
+        vault_path = Path(vault_config.vault_path)
+        cache.load_vault(vault_config.name, vault_path)
+        count = len(cache._cache.get(vault_config.name, {}))
+        reloaded.append(vault_config.name)
+        counts[vault_config.name] = count
+
+    return {"reloaded": reloaded, "counts": counts}
+
+
 def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
     """Convert Task to TaskResponse."""
     # Build Obsidian URL
@@ -406,5 +486,6 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         recurring=task.recurring,
         claude_session_id=task.claude_session_id,
         assignee=task.assignee,
+        blocked_by=task.blocked_by,
         vault=vault_config.name,
     )

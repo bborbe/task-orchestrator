@@ -625,23 +625,58 @@ function showTaskMenu(event, taskId) {
     const button = event.target;
     const rect = button.getBoundingClientRect();
     menu.style.position = 'fixed';
-    menu.style.top = `${rect.bottom + 5}px`;
-    menu.style.left = `${rect.left - 150}px`; // Menu width is ~160px
+    menu.style.visibility = 'hidden'; // Hide while measuring
 
     document.body.appendChild(menu);
 
-    // Close menu on click outside
+    // Measure menu dimensions
+    const menuRect = menu.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    // Calculate vertical position (flip up if doesn't fit below)
+    let top = rect.bottom + 5;
+    if (top + menuRect.height > viewportHeight) {
+        // Open upward
+        top = rect.top - menuRect.height - 5;
+    }
+
+    // Calculate horizontal position (keep within viewport)
+    let left = rect.left - 150;
+    if (left < 0) {
+        left = 5; // Minimum margin from left edge
+    } else if (left + menuRect.width > viewportWidth) {
+        left = viewportWidth - menuRect.width - 5;
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+    menu.style.visibility = 'visible';
+
+    // Close menu on click outside and stop propagation
     setTimeout(() => {
-        document.addEventListener('click', closeMenu);
+        activeMenuCloseHandler = (e) => {
+            if (!menu.contains(e.target)) {
+                e.stopPropagation();
+                e.preventDefault();
+                closeMenu();
+            }
+        };
+        document.addEventListener('click', activeMenuCloseHandler, true);
     }, 0);
 }
+
+let activeMenuCloseHandler = null;
 
 function closeMenu() {
     const menu = document.querySelector('.task-menu');
     if (menu) {
         menu.remove();
     }
-    document.removeEventListener('click', closeMenu);
+    if (activeMenuCloseHandler) {
+        document.removeEventListener('click', activeMenuCloseHandler, true);
+        activeMenuCloseHandler = null;
+    }
 }
 
 async function handleMenuAction(taskId, action) {

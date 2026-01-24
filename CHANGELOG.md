@@ -8,6 +8,16 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.0
+- Add in-memory status cache for fast blocker resolution across all hierarchy levels
+- Extend file watchers to monitor 21-24 folders (Themes, Objectives, Goals, Tasks)
+- Add POST /api/cache/reload endpoint for manual cache refresh
+- Replace disk I/O with O(1) cache lookups for blocked_by field validation
+
+## v0.4.4
+- Fix task menu dropdown positioning to flip upward when near viewport bottom
+- Fix menu positioning to stay within viewport bounds horizontally
+
 ## v0.4.3
 - Use `--tool` flag for slash commands (machine-readable JSON output)
 - Set phase to `human_review` on command failure

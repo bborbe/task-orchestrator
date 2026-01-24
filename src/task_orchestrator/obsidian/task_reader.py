@@ -190,6 +190,13 @@ class ObsidianTaskReader:
         # Get assignee (optional)
         assignee = frontmatter.get("assignee")
 
+        # Get blocked_by (optional: list of wikilinks)
+        blocked_by = frontmatter.get("blocked_by")
+        if isinstance(blocked_by, list):
+            blocked_by = [str(item) for item in blocked_by]
+        elif blocked_by is not None:
+            blocked_by = None  # Invalid format, ignore
+
         # Use filename as title (not H1 headings which are section names)
         title = file_path.stem
 
@@ -219,6 +226,7 @@ class ObsidianTaskReader:
             recurring=recurring,
             claude_session_id=claude_session_id,
             assignee=assignee,
+            blocked_by=blocked_by,
         )
 
     def _normalize_priority(self, value: Any) -> int | str | None:
