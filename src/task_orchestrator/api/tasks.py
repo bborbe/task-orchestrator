@@ -419,7 +419,7 @@ async def clear_task_session(
 
 
 @router.post("/cache/reload")
-async def reload_cache(vault: str | None = None) -> dict:
+async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[str, int]]:
     """Force cache reload for debugging/recovery.
 
     Args:

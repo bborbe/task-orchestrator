@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.1
+- Add priority-based sorting for tasks within each Kanban column
+- Fix mypy type annotation for cache reload endpoint
+
 ## v0.5.0
 - Add in-memory status cache for fast blocker resolution across all hierarchy levels
 - Extend file watchers to monitor 21-24 folders (Themes, Objectives, Goals, Tasks)

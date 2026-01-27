@@ -258,6 +258,13 @@ async function loadTasks() {
             }
         });
 
+        // Sort tasks by priority (high=1, medium=2, low=3, null=999)
+        tasks.sort((a, b) => {
+            const priorityA = normalizePriority(a.priority);
+            const priorityB = normalizePriority(b.priority);
+            return priorityA - priorityB;
+        });
+
         // Populate cards by phase
         const validPhases = ['todo', 'planning', 'in_progress', 'ai_review', 'human_review', 'done'];
         tasks.forEach(task => {
@@ -531,6 +538,30 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function normalizePriority(priority) {
+    // Map priority to numeric value for sorting
+    // high=1, medium=2, low=3, unknown/null=999
+    if (priority === null || priority === undefined) {
+        return 999;
+    }
+
+    // Handle string priorities
+    if (typeof priority === 'string') {
+        const lower = priority.toLowerCase();
+        if (lower === 'high' || lower === 'highest') return 1;
+        if (lower === 'medium') return 2;
+        if (lower === 'low') return 3;
+        return 999; // Unknown string
+    }
+
+    // Handle numeric priorities (already in correct format)
+    if (typeof priority === 'number') {
+        return priority;
+    }
+
+    return 999; // Fallback
 }
 
 function formatPhase(phase) {
