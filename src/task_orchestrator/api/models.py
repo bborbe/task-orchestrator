@@ -60,6 +60,7 @@ class SessionResponse(BaseModel):
     session_id: str
     command: str
     working_dir: str
+    task_title: str  # Task title to display in modal
     executed_command: str | None = None  # The slash command that was executed
     success: bool | None = None  # Whether the command succeeded
     error: str | None = None  # Error message if command failed

@@ -89,9 +89,11 @@ def test_run_task_endpoint_success(
     assert "session_id" in data
     assert "command" in data
     assert "working_dir" in data
+    assert "task_title" in data
     assert len(data["session_id"]) > 0  # Has a session ID
     assert "claude --resume" in data["command"]
     assert data["session_id"] in data["command"]
+    assert data["task_title"] == "Test Task"  # Should match task title
 
 
 def test_run_task_endpoint_not_found(test_client: TestClient) -> None:

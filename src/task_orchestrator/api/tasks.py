@@ -242,6 +242,7 @@ async def run_task(
             session_id=session_id,
             command=command,
             working_dir=vault_config.vault_path,
+            task_title=task.title,
         )
 
     except FileNotFoundError as e:
@@ -349,6 +350,7 @@ async def execute_slash_command(
             session_id=session_id,
             command=command,
             working_dir=vault_config.vault_path,
+            task_title=task.title,
             executed_command=prompt,
             success=success,
             error=error_message,
