@@ -221,10 +221,8 @@ async def run_task(
         prompt = f'/work-on-task "{task_file_path}"'
         logger.info(f"Creating session for task {task_id}, cwd: {vault_config.vault_path}")
 
-        session_id, response = await _session_manager.send_prompt(
-            prompt, cwd=vault_config.vault_path
-        )
-        logger.info(f"Session {session_id} created, response length: {len(response)} chars")
+        session_id = await _session_manager.start_session(prompt, cwd=vault_config.vault_path)
+        logger.info(f"Session {session_id} created")
 
         # Save session_id to task frontmatter
         try:

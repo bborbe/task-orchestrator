@@ -50,6 +50,45 @@ class SessionManager:
         self.set(session_id, session)
         return session
 
+    async def start_session(self, prompt: str, cwd: str | None = None) -> str:
+        """Start a session and return session_id immediately without waiting for response.
+
+        Args:
+            prompt: The prompt to send
+            cwd: Working directory for the session
+
+        Returns:
+            session_id
+        """
+        from claude_code_sdk import SystemMessage
+
+        options = (
+            ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits", cwd=cwd)
+            if cwd
+            else ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits")
+        )
+        client = ClaudeSDKClient(options=options)
+        session_id: str | None = None
+
+        logger.info(f"Starting session: {prompt} (cwd={cwd})")
+
+        async with client:
+            await client.query(prompt)
+            logger.info("Query sent, waiting for session_id")
+
+            async for message in client.receive_response():
+                # Extract session_id from init message and return immediately
+                if isinstance(message, SystemMessage) and message.subtype == "init":
+                    session_id = message.data.get("session_id")
+                    logger.info(f"Got session_id from SystemMessage: {session_id}")
+                    # Return immediately, don't wait for full response
+                    break
+
+        if not session_id:
+            raise ValueError("Did not receive session_id from Claude")
+
+        return session_id
+
     async def send_prompt(self, prompt: str, cwd: str | None = None) -> tuple[str, str]:
         """Send a prompt and get the session_id from Claude.
 
