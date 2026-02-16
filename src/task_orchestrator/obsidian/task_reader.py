@@ -38,6 +38,10 @@ class TaskReader(Protocol):
         """Update the claude_session_id field in task frontmatter."""
         ...
 
+    def update_task_session_status(self, task_id: str, status: str | None) -> None:
+        """Update the claude_session_status field in task frontmatter."""
+        ...
+
 
 class ObsidianTaskReader:
     """Task reader for Obsidian markdown files."""
@@ -90,8 +94,13 @@ class ObsidianTaskReader:
         # Write back with same encoding
         file_path.write_text(new_content, encoding=encoding)
 
-    def update_task_session_id(self, task_id: str, session_id: str | None) -> None:
-        """Update the claude_session_id field in task frontmatter."""
+    def _update_task_frontmatter(self, task_id: str, updates: dict[str, str | None]) -> None:
+        """Update fields in task frontmatter.
+
+        Args:
+            task_id: Task ID
+            updates: Dictionary of field names to values (None removes field)
+        """
         file_path = self._tasks_dir / f"{task_id}.md"
         if not file_path.exists():
             raise FileNotFoundError(f"Task not found: {task_id}")
@@ -117,8 +126,12 @@ class ObsidianTaskReader:
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in task {task_id}") from e
 
-        # Update claude_session_id
-        data["claude_session_id"] = session_id
+        # Update fields
+        for key, value in updates.items():
+            if value is None:
+                data.pop(key, None)  # Remove field if value is None
+            else:
+                data[key] = value
 
         # Serialize back to YAML
         new_frontmatter = yaml.dump(data, default_flow_style=False, sort_keys=False)
@@ -128,6 +141,14 @@ class ObsidianTaskReader:
 
         # Write back with same encoding
         file_path.write_text(new_content, encoding=encoding)
+
+    def update_task_session_id(self, task_id: str, session_id: str | None) -> None:
+        """Update the claude_session_id field in task frontmatter."""
+        self._update_task_frontmatter(task_id, {"claude_session_id": session_id})
+
+    def update_task_session_status(self, task_id: str, status: str | None) -> None:
+        """Update the claude_session_status field in task frontmatter."""
+        self._update_task_frontmatter(task_id, {"claude_session_status": status})
 
     def list_tasks(self, status_filter: list[str] | None = None) -> list[Task]:
         """List all tasks from vault, optionally filtered by status."""

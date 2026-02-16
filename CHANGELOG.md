@@ -12,6 +12,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - Add priority-based sorting for tasks within each Kanban column
 - Fix mypy type annotation for cache reload endpoint
 - Fix slow task session creation by returning session_id immediately without waiting for Claude response
+- Add session status tracking (initializing/ready) to task frontmatter for better UI feedback
 
 ## v0.5.0
 - Add in-memory status cache for fast blocker resolution across all hierarchy levels
