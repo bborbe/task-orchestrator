@@ -92,6 +92,13 @@ class SessionManager:
 
         except Exception as e:
             logger.error(f"Error in background message consumer for {session_id}: {e}")
+        finally:
+            # Always clean up client context
+            try:
+                await client.__aexit__(None, None, None)
+                logger.info(f"Cleaned up client for session {session_id}")
+            except Exception as e:
+                logger.error(f"Error cleaning up client for {session_id}: {e}")
 
     async def start_session(
         self,
@@ -140,15 +147,20 @@ class SessionManager:
                     session_id = message.data.get("session_id")
                     logger.info(f"Got session_id from SystemMessage: {session_id}")
 
-                    # Set status to initializing immediately
-                    if task_id and task_reader:
+                    # Set both session_id and status in single frontmatter write (avoid race)
+                    if task_id and task_reader and session_id:
                         try:
                             await asyncio.to_thread(
-                                task_reader.update_task_session_status, task_id, "initializing"
+                                task_reader.update_task_session_fields,
+                                task_id,
+                                session_id,
+                                "initializing",
                             )
-                            logger.info(f"Updated task {task_id} session status to initializing")
+                            logger.info(
+                                f"Updated task {task_id} with session_id and status=initializing"
+                            )
                         except Exception as e:
-                            logger.error(f"Failed to update task status for {task_id}: {e}")
+                            logger.error(f"Failed to update task frontmatter for {task_id}: {e}")
 
                 # Wait for first AssistantMessage to ensure session is ready
                 if isinstance(message, AssistantMessage) and session_id:

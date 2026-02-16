@@ -42,6 +42,12 @@ class TaskReader(Protocol):
         """Update the claude_session_status field in task frontmatter."""
         ...
 
+    def update_task_session_fields(
+        self, task_id: str, session_id: str | None, status: str | None
+    ) -> None:
+        """Update both claude_session_id and claude_session_status in single write."""
+        ...
+
 
 class ObsidianTaskReader:
     """Task reader for Obsidian markdown files."""
@@ -149,6 +155,14 @@ class ObsidianTaskReader:
     def update_task_session_status(self, task_id: str, status: str | None) -> None:
         """Update the claude_session_status field in task frontmatter."""
         self._update_task_frontmatter(task_id, {"claude_session_status": status})
+
+    def update_task_session_fields(
+        self, task_id: str, session_id: str | None, status: str | None
+    ) -> None:
+        """Update both claude_session_id and claude_session_status in single write."""
+        self._update_task_frontmatter(
+            task_id, {"claude_session_id": session_id, "claude_session_status": status}
+        )
 
     def list_tasks(self, status_filter: list[str] | None = None) -> list[Task]:
         """List all tasks from vault, optionally filtered by status."""

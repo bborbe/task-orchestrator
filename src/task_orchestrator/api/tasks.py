@@ -226,14 +226,6 @@ async def run_task(
         )
         logger.info(f"Session {session_id} created")
 
-        # Save session_id to task frontmatter
-        try:
-            await asyncio.to_thread(reader.update_task_session_id, task_id, session_id)
-            logger.info(f"Saved session_id to task frontmatter: {task_id}")
-        except Exception as save_error:
-            logger.error(f"Failed to save session_id to frontmatter: {save_error}")
-            # Continue anyway - user can still use the session, just won't persist
-
         # Build command: use vault-specific script from config (handles cd internally)
         command = f"{vault_config.claude_script} --resume {session_id}"
 
@@ -339,7 +331,7 @@ async def execute_slash_command(
         # Save session_id if new
         if not existing_session_id:
             try:
-                reader.update_task_session_id(task_id, session_id)
+                await asyncio.to_thread(reader.update_task_session_id, task_id, session_id)
                 logger.info(f"Saved new session_id: {session_id}")
             except Exception as save_error:
                 logger.error(f"Failed to save session_id: {save_error}")
@@ -413,7 +405,7 @@ async def clear_task_session(
     """
     try:
         reader = get_task_reader_for_vault(vault)
-        reader.update_task_session_id(task_id, None)
+        await asyncio.to_thread(reader.update_task_session_id, task_id, None)
         return {"status": "success", "task_id": task_id}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
