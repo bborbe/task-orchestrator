@@ -404,7 +404,7 @@ async function runTask(taskId) {
             }
 
             const command = `${vaultConfig.claude_script} --resume ${task.claude_session_id}`;
-            showModal(task.claude_session_id, command, vaultConfig.vault_path);
+            showModal(task.claude_session_id, command, vaultConfig.vault_path, task.title);
 
             // Restore button
             button.textContent = originalText;
@@ -429,7 +429,7 @@ async function runTask(taskId) {
         task.claude_session_id = data.session_id;
 
         // Show session modal with command
-        showModal(data.session_id, data.command, data.working_dir);
+        showModal(data.session_id, data.command, data.working_dir, data.task_title);
 
         // Restore button and update to Resume
         button.textContent = '▶ Resume';
@@ -448,9 +448,16 @@ async function runTask(taskId) {
     }
 }
 
-function showModal(sessionId, command, workingDir, executedCommand = null, success = null, error = null) {
+function showModal(sessionId, command, workingDir, taskTitle = null, executedCommand = null, success = null, error = null) {
     document.getElementById('session-id').textContent = sessionId;
     document.getElementById('handoff-command').textContent = command;
+
+    // Update task title if provided
+    if (taskTitle) {
+        document.getElementById('task-title').textContent = taskTitle;
+    } else {
+        document.getElementById('task-title').textContent = 'Unknown';
+    }
 
     // Update executed command if provided
     if (executedCommand) {
@@ -482,7 +489,7 @@ function closeModal() {
     document.getElementById('session-modal').classList.add('hidden');
 }
 
-function updateModal(sessionId, command, workingDir, executedCommand = null, success = null, error = null) {
+function updateModal(sessionId, command, workingDir, taskTitle = null, executedCommand = null, success = null, error = null) {
     // Only update if modal is already visible
     const modal = document.getElementById('session-modal');
     if (modal.classList.contains('hidden')) {
@@ -491,6 +498,12 @@ function updateModal(sessionId, command, workingDir, executedCommand = null, suc
 
     document.getElementById('session-id').textContent = sessionId;
     document.getElementById('handoff-command').textContent = command;
+
+    if (taskTitle) {
+        document.getElementById('task-title').textContent = taskTitle;
+    } else {
+        document.getElementById('task-title').textContent = 'Unknown';
+    }
 
     if (executedCommand) {
         document.getElementById('executed-command').textContent = executedCommand;
@@ -803,7 +816,7 @@ async function executeSlashCommand(taskId, commandType) {
 
         // Only show session modal if user didn't dismiss loading modal
         if (!userDismissed) {
-            showModal(data.session_id, data.command, data.working_dir, data.executed_command, data.success, data.error);
+            showModal(data.session_id, data.command, data.working_dir, data.task_title, data.executed_command, data.success, data.error);
         }
 
     } catch (error) {

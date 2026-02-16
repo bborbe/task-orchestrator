@@ -2,6 +2,7 @@
 
 # FastAPI Depends pattern is safe in function signatures
 
+import asyncio
 import logging
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Annotated
@@ -220,18 +221,10 @@ async def run_task(
         prompt = f'/work-on-task "{task_file_path}"'
         logger.info(f"Creating session for task {task_id}, cwd: {vault_config.vault_path}")
 
-        session_id, response = await _session_manager.send_prompt(
-            prompt, cwd=vault_config.vault_path
+        session_id = await _session_manager.start_session(
+            prompt, cwd=vault_config.vault_path, task_id=task_id, task_reader=reader
         )
-        logger.info(f"Session {session_id} created, response length: {len(response)} chars")
-
-        # Save session_id to task frontmatter
-        try:
-            reader.update_task_session_id(task_id, session_id)
-            logger.info(f"Saved session_id to task frontmatter: {task_id}")
-        except Exception as save_error:
-            logger.error(f"Failed to save session_id to frontmatter: {save_error}")
-            # Continue anyway - user can still use the session, just won't persist
+        logger.info(f"Session {session_id} created")
 
         # Build command: use vault-specific script from config (handles cd internally)
         command = f"{vault_config.claude_script} --resume {session_id}"
@@ -242,6 +235,7 @@ async def run_task(
             session_id=session_id,
             command=command,
             working_dir=vault_config.vault_path,
+            task_title=task.title,
         )
 
     except FileNotFoundError as e:
@@ -337,7 +331,7 @@ async def execute_slash_command(
         # Save session_id if new
         if not existing_session_id:
             try:
-                reader.update_task_session_id(task_id, session_id)
+                await asyncio.to_thread(reader.update_task_session_id, task_id, session_id)
                 logger.info(f"Saved new session_id: {session_id}")
             except Exception as save_error:
                 logger.error(f"Failed to save session_id: {save_error}")
@@ -349,6 +343,7 @@ async def execute_slash_command(
             session_id=session_id,
             command=command,
             working_dir=vault_config.vault_path,
+            task_title=task.title,
             executed_command=prompt,
             success=success,
             error=error_message,
@@ -410,7 +405,7 @@ async def clear_task_session(
     """
     try:
         reader = get_task_reader_for_vault(vault)
-        reader.update_task_session_id(task_id, None)
+        await asyncio.to_thread(reader.update_task_session_id, task_id, None)
         return {"status": "success", "task_id": task_id}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
