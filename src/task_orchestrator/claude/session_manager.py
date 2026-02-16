@@ -51,7 +51,10 @@ class SessionManager:
         return session
 
     async def start_session(self, prompt: str, cwd: str | None = None) -> str:
-        """Start a session and return session_id immediately without waiting for response.
+        """Start a session and return session_id after session is ready.
+
+        Waits for first AssistantMessage to ensure session is fully initialized
+        before returning, but doesn't wait for full response.
 
         Args:
             prompt: The prompt to send
@@ -60,7 +63,7 @@ class SessionManager:
         Returns:
             session_id
         """
-        from claude_code_sdk import SystemMessage
+        from claude_code_sdk import AssistantMessage, SystemMessage
 
         options = (
             ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits", cwd=cwd)
@@ -69,6 +72,7 @@ class SessionManager:
         )
         client = ClaudeSDKClient(options=options)
         session_id: str | None = None
+        session_ready = False
 
         logger.info(f"Starting session: {prompt} (cwd={cwd})")
 
@@ -77,15 +81,22 @@ class SessionManager:
             logger.info("Query sent, waiting for session_id")
 
             async for message in client.receive_response():
-                # Extract session_id from init message and return immediately
+                # Extract session_id from init message
                 if isinstance(message, SystemMessage) and message.subtype == "init":
                     session_id = message.data.get("session_id")
                     logger.info(f"Got session_id from SystemMessage: {session_id}")
-                    # Return immediately, don't wait for full response
+
+                # Wait for first AssistantMessage to ensure session is ready
+                if isinstance(message, AssistantMessage):
+                    logger.info("Session ready (received first AssistantMessage)")
+                    session_ready = True
                     break
 
         if not session_id:
             raise ValueError("Did not receive session_id from Claude")
+
+        if not session_ready:
+            raise ValueError("Session not ready (no AssistantMessage received)")
 
         return session_id
 
