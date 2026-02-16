@@ -92,6 +92,15 @@ class SessionManager:
 
         except Exception as e:
             logger.error(f"Error in background message consumer for {session_id}: {e}")
+            # Update status to error so UI knows session failed
+            if task_id and task_reader:
+                try:
+                    await asyncio.to_thread(
+                        task_reader.update_task_session_status, task_id, "error"
+                    )
+                    logger.info(f"Updated task {task_id} session status to error")
+                except Exception as status_error:
+                    logger.error(f"Failed to update error status for {task_id}: {status_error}")
         finally:
             # Always clean up client context
             try:
@@ -111,6 +120,11 @@ class SessionManager:
 
         Returns session_id after first AssistantMessage, then spawns background task
         to consume remaining messages and keep session alive.
+
+        Note: Sessions are not stored in SessionManager because the session_id is
+        sufficient for resumption via `claude --resume <session_id>`. The client
+        connection is only needed during initial prompt processing and is cleaned
+        up by the background task.
 
         Args:
             prompt: The prompt to send
