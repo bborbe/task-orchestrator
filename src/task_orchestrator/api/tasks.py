@@ -2,6 +2,7 @@
 
 # FastAPI Depends pattern is safe in function signatures
 
+import asyncio
 import logging
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Annotated
@@ -227,7 +228,7 @@ async def run_task(
 
         # Save session_id to task frontmatter
         try:
-            reader.update_task_session_id(task_id, session_id)
+            await asyncio.to_thread(reader.update_task_session_id, task_id, session_id)
             logger.info(f"Saved session_id to task frontmatter: {task_id}")
         except Exception as save_error:
             logger.error(f"Failed to save session_id to frontmatter: {save_error}")
