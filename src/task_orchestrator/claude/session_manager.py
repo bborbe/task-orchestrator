@@ -1,5 +1,6 @@
 """Session manager for Claude SDK clients."""
 
+import asyncio
 import logging
 
 from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
@@ -50,11 +51,30 @@ class SessionManager:
         self.set(session_id, session)
         return session
 
-    async def start_session(self, prompt: str, cwd: str | None = None) -> str:
-        """Start a session and return session_id after session is ready.
+    async def _consume_session_messages(
+        self, client: ClaudeSDKClient, session_id: str, started_consuming: asyncio.Event
+    ) -> None:
+        """Consume remaining messages from a session to keep it alive.
 
-        Waits for first AssistantMessage to ensure session is fully initialized
-        before returning, but doesn't wait for full response.
+        Args:
+            client: The Claude SDK client
+            session_id: Session ID for logging
+            started_consuming: Event to set when consumption starts
+        """
+        try:
+            started_consuming.set()
+            logger.info(f"Background task consuming messages for session {session_id}")
+            async for _message in client.receive_response():
+                pass  # Just consume messages to keep connection alive
+            logger.info(f"Background task finished for session {session_id}")
+        except Exception as e:
+            logger.error(f"Error in background message consumer for {session_id}: {e}")
+
+    async def start_session(self, prompt: str, cwd: str | None = None) -> str:
+        """Start a session and return session_id quickly while keeping connection alive.
+
+        Returns session_id after first AssistantMessage, then spawns background task
+        to consume remaining messages and keep session alive.
 
         Args:
             prompt: The prompt to send
@@ -76,7 +96,10 @@ class SessionManager:
 
         logger.info(f"Starting session: {prompt} (cwd={cwd})")
 
-        async with client:
+        # Enter async context but don't use 'with' - we'll manage cleanup manually
+        await client.__aenter__()
+
+        try:
             await client.query(prompt)
             logger.info("Query sent, waiting for session_id")
 
@@ -90,13 +113,26 @@ class SessionManager:
                 if isinstance(message, AssistantMessage):
                     logger.info("Session ready (received first AssistantMessage)")
                     session_ready = True
-                    break
 
-        if not session_id:
-            raise ValueError("Did not receive session_id from Claude")
+                    # Spawn background task to consume remaining messages
+                    started_consuming = asyncio.Event()
+                    asyncio.create_task(self._consume_session_messages(client, session_id, started_consuming))
+                    # Wait briefly to ensure background task starts
+                    await started_consuming.wait()
 
-        if not session_ready:
-            raise ValueError("Session not ready (no AssistantMessage received)")
+                    # Return immediately, background task will keep connection alive
+                    return session_id
+
+            # If we get here, something went wrong
+            if not session_id:
+                raise ValueError("Did not receive session_id from Claude")
+            if not session_ready:
+                raise ValueError("Session not ready (no AssistantMessage received)")
+
+        except Exception:
+            # On error, clean up properly
+            await client.__aexit__(None, None, None)
+            raise
 
         return session_id
 
