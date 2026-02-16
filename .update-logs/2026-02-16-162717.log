@@ -1,0 +1,27 @@
+Update Log - 2026-02-16-162717
+Module: /Users/bborbe/Documents/workspaces/task-orchestrator
+======================================================================
+
+
+======================================================================
+Release: task-orchestrator
+======================================================================
+
+→ Found 5 unreleased entries:
+  - Fix slow task session creation by returning session_id immediately without waiting for Claude response
+  - Add session status tracking (initializing/ready) to task frontmatter for better UI feedback
+  - Fix resource leak by properly cleaning up Claude SDK client in background tasks
+  - Fix race condition by combining session_id + status updates into single frontmatter write
+  - Make all file I/O operations async using asyncio.to_thread() to prevent event loop blocking
+
+=== Analyze Unreleased Entries with Claude ===
+
+  Current version: v0.5.1
+  Version bump: patch
+  New version: v0.5.2
+
+✓ CHANGELOG updated: ## Unreleased → ## v0.5.2
+
+=== Phase 5: Git Commit ===
+→ Git add
+→ Running: git add .
