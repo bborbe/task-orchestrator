@@ -8,14 +8,16 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## v0.5.1
-- Add priority-based sorting for tasks within each Kanban column
-- Fix mypy type annotation for cache reload endpoint
+## Unreleased
 - Fix slow task session creation by returning session_id immediately without waiting for Claude response
 - Add session status tracking (initializing/ready) to task frontmatter for better UI feedback
 - Fix resource leak by properly cleaning up Claude SDK client in background tasks
 - Fix race condition by combining session_id + status updates into single frontmatter write
 - Make all file I/O operations async using asyncio.to_thread() to prevent event loop blocking
+
+## v0.5.1
+- Add priority-based sorting for tasks within each Kanban column
+- Fix mypy type annotation for cache reload endpoint
 
 ## v0.5.0
 - Add in-memory status cache for fast blocker resolution across all hierarchy levels
