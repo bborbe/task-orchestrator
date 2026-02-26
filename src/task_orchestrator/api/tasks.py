@@ -440,7 +440,7 @@ async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[s
             raise HTTPException(status_code=404, detail=f"Unknown vault: {vault}")
 
         vault_path = Path(vault_config.vault_path)
-        cache.load_vault(vault, vault_path)
+        cache.load_vault(vault, vault_path, vault_config.tasks_folder)
         count = len(cache._cache.get(vault, {}))
         return {"reloaded": [vault], "counts": {vault: count}}
 
@@ -449,7 +449,7 @@ async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[s
     counts = {}
     for vault_config in config.vaults:
         vault_path = Path(vault_config.vault_path)
-        cache.load_vault(vault_config.name, vault_path)
+        cache.load_vault(vault_config.name, vault_path, vault_config.tasks_folder)
         count = len(cache._cache.get(vault_config.name, {}))
         reloaded.append(vault_config.name)
         counts[vault_config.name] = count

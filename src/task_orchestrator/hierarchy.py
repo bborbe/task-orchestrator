@@ -42,3 +42,24 @@ def discover_hierarchy_folders(vault_path: Path) -> list[Path]:
         return (category_order.get(suffix, 9999), numeric_prefix, name.lower())
 
     return sorted(folders, key=_sort_key)
+
+
+def discover_hierarchy_folders_for_vault(vault_path: Path, tasks_folder: str) -> list[Path]:
+    """Discover hierarchy folders for a vault with configured tasks-folder preference.
+
+    Keeps all discovered Themes/Objectives/Goals folders.
+    For Tasks folders, prefers exactly the configured ``tasks_folder`` when present,
+    and excludes other ``*Tasks`` folders in the same vault.
+
+    If configured ``tasks_folder`` does not exist, falls back to discovered folders.
+    """
+    folders = discover_hierarchy_folders(vault_path)
+
+    non_tasks = [folder for folder in folders if not folder.name.endswith("Tasks")]
+    task_folders = [folder for folder in folders if folder.name.endswith("Tasks")]
+
+    preferred_task = vault_path / tasks_folder
+    if preferred_task in task_folders:
+        return [*non_tasks, preferred_task]
+
+    return folders

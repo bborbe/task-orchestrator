@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from task_orchestrator.hierarchy import discover_hierarchy_folders
+from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,11 @@ class StatusCache:
         """Initialize empty cache."""
         self._cache: dict[str, dict[str, str]] = {}
         self._vault_paths: dict[str, Path] = {}
+        self._tasks_folders: dict[str, str] = {}
 
-    def load_vault(self, vault_name: str, vault_path: Path) -> None:
+    def load_vault(
+        self, vault_name: str, vault_path: Path, tasks_folder: str | None = None
+    ) -> None:
         """Load/reload all items from discovered hierarchy folders.
 
         Idempotent - safe to call multiple times.
@@ -27,11 +30,14 @@ class StatusCache:
         Args:
             vault_name: Name of the vault (e.g., "Personal")
             vault_path: Path to vault root directory
+            tasks_folder: Preferred tasks folder name for this vault
         """
         cache: dict[str, str] = {}  # Start fresh each time
 
         # Scan discovered hierarchy folders for items with status
-        hierarchy_folders = discover_hierarchy_folders(vault_path)
+        hierarchy_folders = discover_hierarchy_folders_for_vault(
+            vault_path, tasks_folder or "24 Tasks"
+        )
         if not hierarchy_folders:
             logger.info(f"[StatusCache] No hierarchy folders found in: {vault_path}")
 
@@ -45,6 +51,8 @@ class StatusCache:
         # Atomic replacement (overwrites previous cache)
         self._cache[vault_name] = cache
         self._vault_paths[vault_name] = vault_path
+        if tasks_folder is not None:
+            self._tasks_folders[vault_name] = tasks_folder
         logger.info(f"[StatusCache] Loaded {len(cache)} items for vault '{vault_name}'")
 
     def _extract_status(self, file_path: Path) -> str | None:
@@ -95,7 +103,8 @@ class StatusCache:
             return
 
         # Search for file in discovered hierarchy folders
-        for folder_path in discover_hierarchy_folders(vault_path):
+        tasks_folder = self._tasks_folders.get(vault_name, "24 Tasks")
+        for folder_path in discover_hierarchy_folders_for_vault(vault_path, tasks_folder):
             md_file = folder_path / f"{item_id}.md"
             if md_file.exists():
                 status = self._extract_status(md_file)
