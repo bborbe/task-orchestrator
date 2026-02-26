@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from task_orchestrator.claude.executor import ClaudeCodeExecutor, ClaudeExecutor
 from task_orchestrator.config import Config, VaultConfig
+from task_orchestrator.hierarchy import discover_hierarchy_folders
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
 from task_orchestrator.status_cache import StatusCache
@@ -91,7 +92,7 @@ def get_status_cache() -> StatusCache:
 
 
 def start_task_watchers() -> None:
-    """Start file watchers for all configured vaults (21-24 folders)."""
+    """Start file watchers for all discovered hierarchy folders in all vaults."""
     global _watchers
     config = get_config()
     connection_manager = get_connection_manager()
@@ -104,18 +105,15 @@ def start_task_watchers() -> None:
         logger.error("[Factory] No running event loop found")
         return
 
-    # Watch ALL hierarchy folders (not just tasks)
-    folders_to_watch = ["21 Themes", "22 Objectives", "23 Goals", "24 Tasks"]
-
     for vault in config.vaults:
         vault_path = Path(vault.vault_path)
+        folders_to_watch = discover_hierarchy_folders(vault_path)
 
-        for folder in folders_to_watch:
-            folder_path = vault_path / folder
-            if not folder_path.exists():
-                logger.warning(f"[Factory] Folder not found: {folder_path}")
-                continue
+        if not folders_to_watch:
+            logger.info(f"[Factory] No hierarchy folders found for vault: {vault.name}")
+            continue
 
+        for folder_path in folders_to_watch:
             try:
                 watcher = TaskWatcher(folder_path, vault.name)
 
@@ -137,13 +135,16 @@ def start_task_watchers() -> None:
                 watcher.start(background=True)
 
                 # Use unique key per folder
-                watcher_key = f"{vault.name}:{folder}"
+                watcher_key = f"{vault.name}:{folder_path.name}"
                 _watchers[watcher_key] = watcher
-                logger.info(f"[Factory] Watching {folder} for {vault.name}")
+                logger.info(f"[Factory] Watching {folder_path.name} for {vault.name}")
 
             except Exception as e:
                 logger.error(
-                    f"[Factory] Failed to start watcher for {folder} in {vault.name}: {e}",
+                    "[Factory] Failed to start watcher for %s in %s: %s",
+                    folder_path.name,
+                    vault.name,
+                    e,
                     exc_info=True,
                 )
 
