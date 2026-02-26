@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from task_orchestrator.claude.executor import ClaudeCodeExecutor, ClaudeExecutor
 from task_orchestrator.config import Config, VaultConfig
-from task_orchestrator.hierarchy import discover_hierarchy_folders
+from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
 from task_orchestrator.status_cache import StatusCache
@@ -107,7 +107,7 @@ def start_task_watchers() -> None:
 
     for vault in config.vaults:
         vault_path = Path(vault.vault_path)
-        folders_to_watch = discover_hierarchy_folders(vault_path)
+        folders_to_watch = discover_hierarchy_folders_for_vault(vault_path, vault.tasks_folder)
 
         if not folders_to_watch:
             logger.info(f"[Factory] No hierarchy folders found for vault: {vault.name}")
@@ -170,7 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     config = get_config()
     for vault in config.vaults:
         vault_path = Path(vault.vault_path)
-        cache.load_vault(vault.name, vault_path)
+        cache.load_vault(vault.name, vault_path, vault.tasks_folder)
 
     logger.info("[Lifespan] Starting task watchers...")
     start_task_watchers()
