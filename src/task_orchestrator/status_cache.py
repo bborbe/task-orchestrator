@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from task_orchestrator.hierarchy import discover_hierarchy_folders
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ class StatusCache:
         self._vault_paths: dict[str, Path] = {}
 
     def load_vault(self, vault_name: str, vault_path: Path) -> None:
-        """Load/reload all items from vault folders (21-24).
+        """Load/reload all items from discovered hierarchy folders.
 
         Idempotent - safe to call multiple times.
 
@@ -28,13 +30,12 @@ class StatusCache:
         """
         cache: dict[str, str] = {}  # Start fresh each time
 
-        # Scan all hierarchy folders for items with status
-        for folder in ["21 Themes", "22 Objectives", "23 Goals", "24 Tasks"]:
-            folder_path = vault_path / folder
-            if not folder_path.exists():
-                logger.warning(f"[StatusCache] Folder not found: {folder_path}")
-                continue
+        # Scan discovered hierarchy folders for items with status
+        hierarchy_folders = discover_hierarchy_folders(vault_path)
+        if not hierarchy_folders:
+            logger.info(f"[StatusCache] No hierarchy folders found in: {vault_path}")
 
+        for folder_path in hierarchy_folders:
             for md_file in folder_path.rglob("*.md"):
                 item_id = md_file.stem
                 status = self._extract_status(md_file)
@@ -93,9 +94,9 @@ class StatusCache:
             logger.warning(f"[StatusCache] Unknown vault for invalidation: {vault_name}")
             return
 
-        # Search for file in 21-24 folders
-        for folder in ["21 Themes", "22 Objectives", "23 Goals", "24 Tasks"]:
-            md_file = vault_path / folder / f"{item_id}.md"
+        # Search for file in discovered hierarchy folders
+        for folder_path in discover_hierarchy_folders(vault_path):
+            md_file = folder_path / f"{item_id}.md"
             if md_file.exists():
                 status = self._extract_status(md_file)
                 if status:
