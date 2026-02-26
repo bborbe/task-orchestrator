@@ -39,9 +39,7 @@ def test_client(
     # Mock session manager and client factory
     mock_session_manager = MagicMock()
     mock_session_manager.create_session = AsyncMock()
-    mock_session_manager.start_session = AsyncMock(
-        return_value="test-session-id"
-    )
+    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
 
     # Inject mocks into tasks module
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
@@ -244,9 +242,7 @@ Task in vault 2
 
     # Mock session manager
     mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(
-        return_value="test-session-id"
-    )
+    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     # Create app
@@ -323,9 +319,7 @@ Task in vault 2
 
     # Mock session manager
     mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(
-        return_value="test-session-id"
-    )
+    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     # Create app
@@ -415,9 +409,7 @@ Task in vault 3
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
     mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(
-        return_value="test-session-id"
-    )
+    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     app = create_app()

@@ -20,7 +20,7 @@ typecheck:
 check: lint typecheck
 
 .PHONY: test
-test:
+test: sync
 	uv run pytest || test $$? -eq 5
 
 .PHONY: test-integration

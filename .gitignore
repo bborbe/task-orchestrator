@@ -13,3 +13,4 @@ wheels/
 /.mcp-auth-*
 /.mcp-*
 /.mcp.json
+/.update-logs
