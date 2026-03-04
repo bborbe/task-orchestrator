@@ -1,3 +1,6 @@
+# Local configuration (machine-specific, not committed)
+config.yaml
+
 # Python-generated files
 __pycache__/
 *.py[oc]

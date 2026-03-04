@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from task_orchestrator.claude.executor import ClaudeCodeExecutor, ClaudeExecutor
-from task_orchestrator.config import Config, VaultConfig
+from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.hierarchy import discover_hierarchy_folders
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
@@ -33,7 +33,7 @@ def get_config() -> Config:
     """Get or create Config instance."""
     global _config
     if _config is None:
-        _config = Config()
+        _config = load_config()
     return _config
 
 

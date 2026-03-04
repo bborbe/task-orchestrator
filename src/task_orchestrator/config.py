@@ -1,9 +1,10 @@
 """Configuration for TaskOrchestrator."""
 
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
 
-from pydantic import Field
-from pydantic_settings import BaseSettings
+import yaml
 
 
 @dataclass
@@ -17,30 +18,14 @@ class VaultConfig:
     claude_script: str = "claude"  # Script to run Claude sessions (default: "claude")
 
 
-class Config(BaseSettings):
+@dataclass
+class Config:
     """Application configuration."""
 
-    vaults: list[VaultConfig] = Field(
-        default_factory=lambda: [
-            VaultConfig(
-                name="Personal",
-                vault_path="/Users/bborbe/Documents/Obsidian/Personal",
-                vault_name="Personal",
-                tasks_folder="24 Tasks",
-                claude_script="claude-obsidian-personal.sh",
-            ),
-            VaultConfig(
-                name="Brogrammers",
-                vault_path="/Users/bborbe/Documents/Obsidian/Brogrammers",
-                vault_name="Brogrammers",
-                tasks_folder="40 Tasks",
-                claude_script="claude-obsidian-brogrammers.sh",
-            ),
-        ]
-    )
-    claude_cli: str = Field(default="claude")
-    host: str = Field(default="127.0.0.1")
-    port: int = Field(default=8000)
+    vaults: list[VaultConfig] = field(default_factory=list)
+    claude_cli: str = "claude"
+    host: str = "127.0.0.1"
+    port: int = 8000
 
     def get_vault(self, name: str) -> VaultConfig | None:
         """Get vault config by name."""
@@ -48,3 +33,30 @@ class Config(BaseSettings):
             if vault.name == name:
                 return vault
         return None
+
+
+_CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
+
+
+def load_config(config_path: Path = _CONFIG_PATH) -> Config:
+    """Load configuration from config.yaml. Exits with error if not found."""
+    if not config_path.exists():
+        print(
+            f"ERROR: config.yaml not found at {config_path}\n"
+            "\nCreate it by copying the example:\n"
+            "  cp config.yaml.example config.yaml\n"
+            "\nThen edit vault paths to match your system.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    with config_path.open() as f:
+        data = yaml.safe_load(f)
+
+    vaults = [VaultConfig(**v) for v in data.get("vaults", [])]
+    return Config(
+        vaults=vaults,
+        claude_cli=data.get("claude_cli", "claude"),
+        host=data.get("host", "127.0.0.1"),
+        port=data.get("port", 8000),
+    )
