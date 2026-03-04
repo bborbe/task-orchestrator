@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.3
+- Add external config.yaml support with hard exit and helpful error if missing
+- Add config.yaml.example with all configurable fields documented
+- Remove hardcoded vault defaults in favour of config.yaml
+- Add tests for config loading, vault parsing, and missing file error
+
 ## v0.5.2
 - Fix slow task session creation by returning session_id immediately without waiting for Claude response
 - Add session status tracking (initializing/ready) to task frontmatter for better UI feedback
