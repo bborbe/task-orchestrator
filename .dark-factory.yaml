@@ -1,5 +1,1 @@
 workflow: direct
-completedDir: prompts/completed
-logDir: prompts/log
-debounceMs: 500
-serverPort: 0
