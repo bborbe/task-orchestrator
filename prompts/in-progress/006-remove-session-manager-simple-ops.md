@@ -1,3 +1,8 @@
+---
+status: approved
+created: "2026-03-07T23:14:53Z"
+queued: "2026-03-07T23:14:53Z"
+---
 <summary>
 - The session manager is no longer needed for defer, complete, or phase operations
 - Only work-on-task and create-task still use Claude sessions

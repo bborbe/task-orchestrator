@@ -348,10 +348,7 @@ async def execute_slash_command(
 
         # Send slash command with --tool flag for machine-readable output
         # Commands with --tool return {"success": true/false, ...}
-        if request.command == "defer-task":
-            tomorrow = (date.today() + timedelta(days=1)).isoformat()
-            prompt = f'/{request.command} "{task_file_path}" {tomorrow} --tool'
-        elif request.command == "complete-task" or request.command == "create-task":
+        if request.command == "create-task":
             prompt = f'/{request.command} "{task_file_path}" --tool'
         else:
             prompt = f'/{request.command} "{task_file_path}"'

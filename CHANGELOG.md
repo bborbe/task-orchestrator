@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.1
+- refactor: Remove dead defer-task and complete-task branches from Claude session path in execute_slash_command
+
 ## v0.7.0
 - feat: Show success toast and refresh task list instead of session modal when vault-cli fast path returns empty session_id
 

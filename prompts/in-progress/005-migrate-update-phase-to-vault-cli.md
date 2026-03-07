@@ -1,3 +1,8 @@
+---
+status: approved
+created: "2026-03-07T23:14:53Z"
+queued: "2026-03-07T23:14:53Z"
+---
 <summary>
 - Phase updates (drag-and-drop in UI) now use vault-cli instead of Python frontmatter editing
 - The update_task_phase endpoint calls vault-cli task set instead of reader.update_task_phase
