@@ -190,13 +190,15 @@ def test_list_tasks_defer_date_datetime_format(test_client: TestClient, tmp_vaul
     # Task with past datetime defer_date should be included
     past_task = tasks_dir / "Past Datetime Deferred.md"
     past_task.write_text(
-        "---\nstatus: in_progress\nphase: todo\ndefer_date: 2020-01-01T10:00:00+01:00\n---\n\nPast.\n"
+        "---\nstatus: in_progress\nphase: todo\n"
+        "defer_date: 2020-01-01T10:00:00+01:00\n---\n\nPast.\n"
     )
 
     # Task with future datetime defer_date should be excluded
     future_task = tasks_dir / "Future Datetime Deferred.md"
     future_task.write_text(
-        "---\nstatus: in_progress\nphase: todo\ndefer_date: 2099-12-31T21:35:32.742132+01:00\n---\n\nFuture.\n"
+        "---\nstatus: in_progress\nphase: todo\n"
+        "defer_date: 2099-12-31T21:35:32.742132+01:00\n---\n\nFuture.\n"
     )
 
     response = test_client.get("/api/tasks?vault=TestVault")
@@ -705,8 +707,9 @@ def test_execute_vault_cli_uses_configured_path(
     mock_session_manager.start_session = AM(return_value="sess-id")
     monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
-    from task_orchestrator.__main__ import create_app
     from fastapi.testclient import TestClient as TC
+
+    from task_orchestrator.__main__ import create_app
 
     app = create_app()
     client = TC(app)
