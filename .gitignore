@@ -17,3 +17,5 @@ wheels/
 /.mcp-*
 /.mcp.json
 /.update-logs
+/.dark-factory.lock
+/prompts/log
