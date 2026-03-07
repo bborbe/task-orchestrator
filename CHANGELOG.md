@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.0
+- feat: Show success toast and refresh task list instead of session modal when vault-cli fast path returns empty session_id
+
 ## v0.6.0
 - feat: Replace Claude Code session path for defer-task and complete-task with direct vault-cli subprocess calls for millisecond-speed execution
 - feat: Add `vault_cli_path` field to `VaultConfig` (default `"vault-cli"`) for configurable binary path

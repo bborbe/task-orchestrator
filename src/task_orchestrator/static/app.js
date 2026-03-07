@@ -761,6 +761,43 @@ async function handleMenuAction(taskId, action) {
     }
 }
 
+function showToast(message, isError = false) {
+    // Inject CSS on first use
+    if (!document.getElementById('toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.textContent = `
+            .toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #333;
+                color: #fff;
+                padding: 12px 24px;
+                border-radius: 6px;
+                z-index: 10000;
+                font-size: 14px;
+                opacity: 1;
+                transition: opacity 0.4s ease;
+            }
+            .toast.error { background: #c0392b; }
+            .toast.fade-out { opacity: 0; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast' + (isError ? ' error' : '');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    const duration = isError ? 4000 : 2000;
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 400);
+    }, duration);
+}
+
 async function executeSlashCommand(taskId, commandType) {
     const task = tasksCache[taskId];
     if (!task) {
@@ -814,8 +851,17 @@ async function executeSlashCommand(taskId, commandType) {
         // Hide loading modal
         loadingModal.classList.add('hidden');
 
-        // Only show session modal if user didn't dismiss loading modal
-        if (!userDismissed) {
+        // vault-cli fast path: empty session_id means instant execution
+        if (!data.session_id) {
+            if (!data.success || data.error) {
+                showToast(data.error || 'Command failed', true);
+            } else {
+                const successMessage = commandType === 'defer_task' ? 'Task deferred' : 'Task completed';
+                showToast(successMessage);
+                loadTasks();
+            }
+        } else if (!userDismissed) {
+            // Only show session modal if user didn't dismiss loading modal
             showModal(data.session_id, data.command, data.working_dir, data.task_title, data.executed_command, data.success, data.error);
         }
 
