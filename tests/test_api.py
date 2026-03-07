@@ -571,6 +571,161 @@ Task with invalid phase
     assert "Task Invalid Phase" in task_ids
 
 
+def test_execute_defer_task_uses_vault_cli(
+    test_client: TestClient,
+    sample_task_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that defer-task uses the vault-cli fast path instead of a Claude session."""
+    from datetime import date, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b"deferred ok\n", b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        response = test_client.post(
+            "/api/tasks/Test%20Task/execute-command?vault=TestVault",
+            json={"command": "defer-task"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["session_id"] == ""
+    assert "vault-cli" in data["command"]
+    assert "defer" in data["command"]
+    assert data["response"] == "deferred ok\n"
+
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    called_args = mock_exec.call_args[0]
+    assert called_args == (
+        "vault-cli",
+        "task",
+        "defer",
+        "Test Task",
+        tomorrow,
+        "--vault",
+        "TestVault",
+    )
+
+
+def test_execute_complete_task_uses_vault_cli(
+    test_client: TestClient,
+    sample_task_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that complete-task uses the vault-cli fast path instead of a Claude session."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b"completed ok\n", b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        response = test_client.post(
+            "/api/tasks/Test%20Task/execute-command?vault=TestVault",
+            json={"command": "complete-task"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["session_id"] == ""
+    assert "vault-cli" in data["command"]
+    assert "complete" in data["command"]
+    assert data["response"] == "completed ok\n"
+
+    called_args = mock_exec.call_args[0]
+    assert called_args == (
+        "vault-cli",
+        "task",
+        "complete",
+        "Test Task",
+        "--vault",
+        "TestVault",
+    )
+
+
+def test_execute_vault_cli_failure_returns_500(
+    test_client: TestClient,
+    sample_task_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that vault-cli failure (non-zero exit) returns HTTP 500 with stderr."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.communicate = AsyncMock(return_value=(b"", b"task not found\n"))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+        response = test_client.post(
+            "/api/tasks/Test%20Task/execute-command?vault=TestVault",
+            json={"command": "complete-task"},
+        )
+
+    assert response.status_code == 500
+    assert "task not found" in response.json()["detail"]
+
+
+def test_execute_vault_cli_uses_configured_path(
+    tmp_vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that vault_cli_path from VaultConfig is used as the binary path."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from task_orchestrator.config import VaultConfig
+
+    tasks_dir = tmp_vault / "24 Tasks"
+    task_file = tasks_dir / "My Task.md"
+    task_file.write_text("---\nstatus: todo\n---\nTask body\n")
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(
+                name="MyVault",
+                vault_path=str(tmp_vault),
+                vault_name="MyVault",
+                tasks_folder="24 Tasks",
+                vault_cli_path="/usr/local/bin/vault-cli",
+            )
+        ],
+        claude_cli="claude",
+        host="127.0.0.1",
+        port=8000,
+    )
+
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    from unittest.mock import AsyncMock as AM
+    from unittest.mock import MagicMock as MM
+
+    mock_session_manager = MM()
+    mock_session_manager.start_session = AM(return_value="sess-id")
+    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
+
+    from task_orchestrator.__main__ import create_app
+    from fastapi.testclient import TestClient as TC
+
+    app = create_app()
+    client = TC(app)
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b"ok\n", b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        response = client.post(
+            "/api/tasks/My%20Task/execute-command?vault=MyVault",
+            json={"command": "complete-task"},
+        )
+
+    assert response.status_code == 200
+    called_args = mock_exec.call_args[0]
+    assert called_args[0] == "/usr/local/bin/vault-cli"
+
+
 def test_list_tasks_warns_on_status_phase_mismatch(
     test_client: TestClient, tmp_vault: Path
 ) -> None:

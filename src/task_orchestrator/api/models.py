@@ -64,3 +64,4 @@ class SessionResponse(BaseModel):
     executed_command: str | None = None  # The slash command that was executed
     success: bool | None = None  # Whether the command succeeded
     error: str | None = None  # Error message if command failed
+    response: str | None = None  # Stdout from vault-cli fast path

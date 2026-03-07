@@ -21,6 +21,7 @@ from task_orchestrator.factory import (
 
 if TYPE_CHECKING:
     from task_orchestrator.claude.session_manager import SessionManager
+    from task_orchestrator.websocket.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,20 @@ router = APIRouter()
 # Global session manager (initialized in main)
 _session_manager: "SessionManager | None" = None
 
+# Global connection manager (injected via set_connection_manager)
+_connection_manager: "ConnectionManager | None" = None
+
 
 def set_session_manager(manager: "SessionManager") -> None:
     """Set global session manager."""
     global _session_manager
     _session_manager = manager
+
+
+def set_connection_manager(manager: "ConnectionManager") -> None:
+    """Set global connection manager."""
+    global _connection_manager
+    _connection_manager = manager
 
 
 class VaultResponse(BaseModel):
@@ -274,15 +284,61 @@ async def execute_slash_command(
         f"execute_slash_command: vault={vault}, task_id={task_id}, command={request.command}"
     )
 
-    if not _session_manager:
-        raise HTTPException(status_code=500, detail="Session manager not initialized")
-
     try:
         reader = get_task_reader_for_vault(vault)
         vault_config = get_vault_config(vault)
 
         # Read task
         task = reader.read_task(task_id)
+
+        # Fast path: defer-task and complete-task use vault-cli directly (no AI session needed)
+        if request.command in ("defer-task", "complete-task"):
+            if request.command == "defer-task":
+                tomorrow = (date.today() + timedelta(days=1)).isoformat()
+                vault_cli_args = [
+                    vault_config.vault_cli_path,
+                    "task",
+                    "defer",
+                    task_id,
+                    tomorrow,
+                    "--vault",
+                    vault_config.name,
+                ]
+            else:
+                vault_cli_args = [
+                    vault_config.vault_cli_path,
+                    "task",
+                    "complete",
+                    task_id,
+                    "--vault",
+                    vault_config.name,
+                ]
+
+            proc = await asyncio.create_subprocess_exec(
+                *vault_cli_args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                raise HTTPException(status_code=500, detail=stderr.decode())
+
+            if _connection_manager:
+                await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
+
+            command_str = " ".join(vault_cli_args)
+            logger.info(f"vault-cli fast path completed: {command_str}")
+            return SessionResponse(
+                session_id="",
+                command=command_str,
+                working_dir=vault_config.vault_path,
+                task_title=task.title,
+                response=stdout.decode(),
+            )
+
+        if not _session_manager:
+            raise HTTPException(status_code=500, detail="Session manager not initialized")
 
         # Build task file path
         task_file_path = f"{vault_config.tasks_folder}/{task.id}.md"
@@ -357,6 +413,8 @@ async def execute_slash_command(
             error=error_message,
         )
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         logger.error(f"Task not found: {e}")
         raise HTTPException(status_code=404, detail=str(e)) from e

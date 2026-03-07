@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.6.0
+- feat: Replace Claude Code session path for defer-task and complete-task with direct vault-cli subprocess calls for millisecond-speed execution
+- feat: Add `vault_cli_path` field to `VaultConfig` (default `"vault-cli"`) for configurable binary path
+- feat: Broadcast `task_updated` WebSocket event after successful vault-cli defer/complete so the UI refreshes automatically
+
 ## v0.5.4
 - fix: Accept full ISO datetime strings in defer_date frontmatter field (e.g. `2026-03-08T21:35:32.742132+01:00`)
 

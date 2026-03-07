@@ -16,6 +16,7 @@ class VaultConfig:
     vault_name: str  # For obsidian:// URLs
     tasks_folder: str
     claude_script: str = "claude"  # Script to run Claude sessions (default: "claude")
+    vault_cli_path: str = "vault-cli"  # Path to vault-cli binary
 
 
 @dataclass

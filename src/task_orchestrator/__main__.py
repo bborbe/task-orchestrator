@@ -5,6 +5,7 @@ import sys
 
 import uvicorn
 
+from task_orchestrator.api.tasks import set_connection_manager as tasks_set_connection_manager
 from task_orchestrator.api.tasks import set_session_manager
 from task_orchestrator.api.websocket import set_connection_manager
 from task_orchestrator.claude.session_manager import SessionManager
@@ -25,6 +26,9 @@ set_session_manager(session_manager)
 
 # Inject connection manager into WebSocket routes
 set_connection_manager(get_connection_manager())
+
+# Inject connection manager into task routes (for post-command broadcasts)
+tasks_set_connection_manager(get_connection_manager())
 
 
 def main() -> int:
