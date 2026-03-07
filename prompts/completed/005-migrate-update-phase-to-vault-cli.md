@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced reader.update_task_phase() in PATCH /tasks/{task_id}/phase with an asyncio.create_subprocess_exec call to vault-cli task set, following the established fast-path pattern, with WebSocket broadcast on success and two new tests verifying command construction and failure handling.
+container: task-orchestrator-005-migrate-update-phase-to-vault-cli
+dark-factory-version: v0.26.0
 created: "2026-03-07T23:14:53Z"
 queued: "2026-03-07T23:14:53Z"
+started: "2026-03-07T23:15:45Z"
+completed: "2026-03-07T23:16:56Z"
 ---
 <summary>
 - Phase updates (drag-and-drop in UI) now use vault-cli instead of Python frontmatter editing
