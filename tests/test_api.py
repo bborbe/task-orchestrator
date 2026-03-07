@@ -729,6 +729,21 @@ def test_execute_vault_cli_uses_configured_path(
     assert called_args[0] == "/usr/local/bin/vault-cli"
 
 
+def test_execute_unknown_command_returns_400(
+    test_client: TestClient,
+    sample_task_file: Path,
+) -> None:
+    """Test that an unknown command returns HTTP 400."""
+    response = test_client.post(
+        "/api/tasks/Test%20Task/execute-command?vault=TestVault",
+        json={"command": "phase-migrate"},
+    )
+
+    assert response.status_code == 400
+    assert "Unknown command" in response.json()["detail"]
+    assert "phase-migrate" in response.json()["detail"]
+
+
 def test_update_task_phase_uses_vault_cli(
     test_client: TestClient,
     sample_task_file: Path,

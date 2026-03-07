@@ -291,7 +291,12 @@ async def execute_slash_command(
         # Read task
         task = reader.read_task(task_id)
 
-        # Fast path: defer-task and complete-task use vault-cli directly (no AI session needed)
+        # Fast path (vault-cli, no AI session):
+        #   - defer-task: vault-cli task defer
+        #   - complete-task: vault-cli task complete
+        # Session path (Claude AI):
+        #   - work-on-task: needs AI reasoning
+        #   - create-task: needs AI reasoning
         if request.command in ("defer-task", "complete-task"):
             if request.command == "defer-task":
                 tomorrow = (date.today() + timedelta(days=1)).isoformat()
@@ -337,6 +342,9 @@ async def execute_slash_command(
                 response=stdout.decode(),
             )
 
+        if request.command not in ("work-on-task", "create-task"):
+            raise HTTPException(status_code=400, detail=f"Unknown command: {request.command}")
+
         if not _session_manager:
             raise HTTPException(status_code=500, detail="Session manager not initialized")
 
@@ -349,9 +357,9 @@ async def execute_slash_command(
         # Send slash command with --tool flag for machine-readable output
         # Commands with --tool return {"success": true/false, ...}
         if request.command == "create-task":
-            prompt = f'/{request.command} "{task_file_path}" --tool'
-        else:
-            prompt = f'/{request.command} "{task_file_path}"'
+            prompt = f'/create-task "{task_file_path}" --tool'
+        else:  # work-on-task
+            prompt = f'/work-on-task "{task_file_path}"'
 
         if existing_session_id:
             logger.info(f"Resuming existing session: {existing_session_id} with command: {prompt}")

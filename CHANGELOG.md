@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.3
+- refactor: Add command routing comment and 400 guard for unknown commands in `execute_slash_command`; replace generic else prompt with explicit `work-on-task` branch
+
 ## v0.7.2
 - refactor: Replace `reader.update_task_phase()` in PATCH `/tasks/{id}/phase` with `vault-cli task set <task> phase <value>` subprocess call, making vault-cli the single source of truth for all task mutations
 
