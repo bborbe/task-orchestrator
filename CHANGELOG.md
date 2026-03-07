@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.4
+- fix: Accept full ISO datetime strings in defer_date frontmatter field (e.g. `2026-03-08T21:35:32.742132+01:00`)
+
 ## v0.5.3
 - Add external config.yaml support with hard exit and helpful error if missing
 - Add config.yaml.example with all configurable fields documented

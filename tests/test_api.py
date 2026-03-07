@@ -183,6 +183,30 @@ Task due today should appear.
     assert "Task Due Today" in task_ids
 
 
+def test_list_tasks_defer_date_datetime_format(test_client: TestClient, tmp_vault: Path) -> None:
+    """Test that defer_date with full ISO datetime string is parsed correctly."""
+    tasks_dir = tmp_vault / "24 Tasks"
+
+    # Task with past datetime defer_date should be included
+    past_task = tasks_dir / "Past Datetime Deferred.md"
+    past_task.write_text(
+        "---\nstatus: in_progress\nphase: todo\ndefer_date: 2020-01-01T10:00:00+01:00\n---\n\nPast.\n"
+    )
+
+    # Task with future datetime defer_date should be excluded
+    future_task = tasks_dir / "Future Datetime Deferred.md"
+    future_task.write_text(
+        "---\nstatus: in_progress\nphase: todo\ndefer_date: 2099-12-31T21:35:32.742132+01:00\n---\n\nFuture.\n"
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Past Datetime Deferred" in task_ids
+    assert "Future Datetime Deferred" not in task_ids
+
+
 def test_list_tasks_no_vault_returns_all_vaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

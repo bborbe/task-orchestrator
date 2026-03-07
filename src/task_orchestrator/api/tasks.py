@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import quote
 
@@ -76,6 +76,14 @@ async def list_vaults() -> list[VaultResponse]:
     ]
 
 
+def _parse_defer_date(defer_date: str) -> date:
+    """Parse defer_date string, accepting both date-only and full datetime formats."""
+    try:
+        return date.fromisoformat(defer_date)
+    except ValueError:
+        return datetime.fromisoformat(defer_date).date()
+
+
 @router.get("/tasks", response_model=list[TaskResponse])
 async def list_tasks(
     vault: Annotated[list[str] | None, Query()] = None,
@@ -138,7 +146,7 @@ async def list_tasks(
         # Filter out deferred tasks (defer_date in future)
         today = date.today()
         tasks = [
-            t for t in tasks if t.defer_date is None or date.fromisoformat(t.defer_date) <= today
+            t for t in tasks if t.defer_date is None or _parse_defer_date(t.defer_date) <= today
         ]
 
         # Filter out blocked tasks (use cache for fast lookup)
