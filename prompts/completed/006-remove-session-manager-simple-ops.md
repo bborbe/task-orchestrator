@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added command routing comment block, 400 guard for unknown commands, and explicit work-on-task prompt branch in execute_slash_command; added test verifying unknown command returns 400.
+container: task-orchestrator-006-remove-session-manager-simple-ops
+dark-factory-version: v0.26.0
 created: "2026-03-07T23:14:53Z"
 queued: "2026-03-07T23:14:53Z"
+started: "2026-03-07T23:16:59Z"
+completed: "2026-03-07T23:18:27Z"
 ---
 <summary>
 - The session manager is no longer needed for defer, complete, or phase operations
