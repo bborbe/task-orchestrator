@@ -19,3 +19,4 @@ wheels/
 /.update-logs
 /.dark-factory.lock
 /prompts/log
+/specs/log
