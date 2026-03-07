@@ -302,7 +302,7 @@ async def execute_slash_command(
                     task_id,
                     tomorrow,
                     "--vault",
-                    vault_config.name,
+                    vault_config.name.lower(),
                 ]
             else:
                 vault_cli_args = [
@@ -311,7 +311,7 @@ async def execute_slash_command(
                     "complete",
                     task_id,
                     "--vault",
-                    vault_config.name,
+                    vault_config.name.lower(),
                 ]
 
             proc = await asyncio.create_subprocess_exec(

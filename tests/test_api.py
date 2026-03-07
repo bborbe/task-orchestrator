@@ -606,7 +606,7 @@ def test_execute_defer_task_uses_vault_cli(
         "Test Task",
         tomorrow,
         "--vault",
-        "TestVault",
+        "testvault",
     )
 
 
@@ -642,7 +642,7 @@ def test_execute_complete_task_uses_vault_cli(
         "complete",
         "Test Task",
         "--vault",
-        "TestVault",
+        "testvault",
     )
 
 
