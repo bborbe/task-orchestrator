@@ -729,6 +729,63 @@ def test_execute_vault_cli_uses_configured_path(
     assert called_args[0] == "/usr/local/bin/vault-cli"
 
 
+def test_update_task_phase_uses_vault_cli(
+    test_client: TestClient,
+    sample_task_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that PATCH /tasks/{id}/phase uses vault-cli task set."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        response = test_client.patch(
+            "/api/tasks/Test%20Task/phase?vault=TestVault",
+            json={"phase": "in_progress"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {"status": "success", "task_id": "Test Task", "phase": "in_progress"}
+
+    called_args = mock_exec.call_args[0]
+    assert called_args == (
+        "vault-cli",
+        "task",
+        "set",
+        "Test Task",
+        "phase",
+        "in_progress",
+        "--vault",
+        "testvault",
+    )
+
+
+def test_update_task_phase_vault_cli_failure_returns_500(
+    test_client: TestClient,
+    sample_task_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that vault-cli failure during phase update returns HTTP 500."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.communicate = AsyncMock(return_value=(b"", b"phase update failed\n"))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+        response = test_client.patch(
+            "/api/tasks/Test%20Task/phase?vault=TestVault",
+            json={"phase": "in_progress"},
+        )
+
+    assert response.status_code == 500
+    assert "phase update failed" in response.json()["detail"]
+
+
 def test_list_tasks_warns_on_status_phase_mismatch(
     test_client: TestClient, tmp_vault: Path
 ) -> None:

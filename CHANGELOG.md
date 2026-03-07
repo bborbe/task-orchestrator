@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.2
+- refactor: Replace `reader.update_task_phase()` in PATCH `/tasks/{id}/phase` with `vault-cli task set <task> phase <value>` subprocess call, making vault-cli the single source of truth for all task mutations
+
 ## v0.7.1
 - refactor: Remove dead defer-task and complete-task branches from Claude session path in execute_slash_command
 

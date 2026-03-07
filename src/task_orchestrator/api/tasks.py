@@ -440,9 +440,32 @@ async def update_task_phase(
         HTTPException: If task not found or update fails
     """
     try:
-        reader = get_task_reader_for_vault(vault)
-        reader.update_task_phase(task_id, request.phase)
+        get_task_reader_for_vault(vault)
+        vault_config = get_vault_config(vault)
+
+        proc = await asyncio.create_subprocess_exec(
+            vault_config.vault_cli_path,
+            "task",
+            "set",
+            task_id,
+            "phase",
+            request.phase,
+            "--vault",
+            vault_config.name.lower(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=stderr.decode())
+
+        if _connection_manager:
+            await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
+
         return {"status": "success", "task_id": task_id, "phase": request.phase}
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
