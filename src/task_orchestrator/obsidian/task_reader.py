@@ -61,44 +61,23 @@ class ObsidianTaskReader:
         """Get the tasks directory path."""
         return self._tasks_dir
 
+    def _read_file(self, file_path: Path) -> tuple[str, str]:
+        """Read file with UTF-8/latin-1 fallback.
+
+        Args:
+            file_path: Path to file
+
+        Returns:
+            Tuple of (content, encoding used)
+        """
+        try:
+            return file_path.read_text(encoding="utf-8"), "utf-8"
+        except UnicodeDecodeError:
+            return file_path.read_text(encoding="latin-1"), "latin-1"
+
     def update_task_phase(self, task_id: str, new_phase: str) -> None:
         """Update the phase field in task frontmatter."""
-        file_path = self._tasks_dir / f"{task_id}.md"
-        if not file_path.exists():
-            raise FileNotFoundError(f"Task not found: {task_id}")
-
-        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            encoding = "utf-8"
-        except UnicodeDecodeError:
-            content = file_path.read_text(encoding="latin-1")
-            encoding = "latin-1"
-
-        # Match frontmatter between --- markers
-        match = re.match(r"^(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
-        if not match:
-            raise ValueError(f"Task {task_id} has no frontmatter")
-
-        frontmatter_text = match.group(2)
-
-        # Parse existing frontmatter
-        try:
-            data = yaml.safe_load(frontmatter_text) or {}
-        except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in task {task_id}") from e
-
-        # Update phase
-        data["phase"] = new_phase
-
-        # Serialize back to YAML
-        new_frontmatter = yaml.dump(data, default_flow_style=False, sort_keys=False)
-
-        # Reconstruct content
-        new_content = f"---\n{new_frontmatter}---" + content[match.end() :]
-
-        # Write back with same encoding
-        file_path.write_text(new_content, encoding=encoding)
+        self._update_task_frontmatter(task_id, {"phase": new_phase})
 
     def _update_task_frontmatter(self, task_id: str, updates: dict[str, str | None]) -> None:
         """Update fields in task frontmatter.
@@ -111,13 +90,7 @@ class ObsidianTaskReader:
         if not file_path.exists():
             raise FileNotFoundError(f"Task not found: {task_id}")
 
-        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            encoding = "utf-8"
-        except UnicodeDecodeError:
-            content = file_path.read_text(encoding="latin-1")
-            encoding = "latin-1"
+        content, encoding = self._read_file(file_path)
 
         # Match frontmatter between --- markers
         match = re.match(r"^(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
@@ -186,11 +159,7 @@ class ObsidianTaskReader:
 
     def _parse_task(self, file_path: Path) -> Task:
         """Parse markdown file into Task object."""
-        # Try UTF-8 first, fallback to latin-1 for non-UTF-8 files
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            content = file_path.read_text(encoding="latin-1")
+        content, _ = self._read_file(file_path)
 
         # Extract frontmatter
         frontmatter = self._extract_frontmatter(content)
