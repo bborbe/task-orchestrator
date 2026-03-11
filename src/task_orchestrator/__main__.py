@@ -15,20 +15,8 @@ from task_orchestrator.factory import (
     get_connection_manager,
 )
 
-# Create session manager
-session_manager = SessionManager()
-
-# Create app instance for uvicorn
+# Create app instance at module level for uvicorn --reload (make watch)
 app = create_app()
-
-# Inject session manager into API routes
-set_session_manager(session_manager)
-
-# Inject connection manager into WebSocket routes
-set_connection_manager(get_connection_manager())
-
-# Inject connection manager into task routes (for post-command broadcasts)
-tasks_set_connection_manager(get_connection_manager())
 
 
 def main() -> int:
@@ -40,15 +28,28 @@ def main() -> int:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    config = get_config()
+    try:
+        session_manager = SessionManager()
 
-    # Run server with app from module level
-    uvicorn.run(
-        app,
-        host=config.host,
-        port=config.port,
-        log_level="info",
-    )
+        # Inject session manager into API routes
+        set_session_manager(session_manager)
+
+        # Inject connection manager into WebSocket routes
+        set_connection_manager(get_connection_manager())
+
+        # Inject connection manager into task routes (for post-command broadcasts)
+        tasks_set_connection_manager(get_connection_manager())
+
+        config = get_config()
+        uvicorn.run(
+            app,
+            host=config.host,
+            port=config.port,
+            log_level="info",
+        )
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
 
     return 0
 

@@ -1,6 +1,5 @@
 """Configuration for TaskOrchestrator."""
 
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,14 +41,12 @@ _CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 def load_config(config_path: Path = _CONFIG_PATH) -> Config:
     """Load configuration from config.yaml. Exits with error if not found."""
     if not config_path.exists():
-        print(
-            f"ERROR: config.yaml not found at {config_path}\n"
+        raise FileNotFoundError(
+            f"config.yaml not found at {config_path}\n"
             "\nCreate it by copying the example:\n"
             "  cp config.yaml.example config.yaml\n"
-            "\nThen edit vault paths to match your system.",
-            file=sys.stderr,
+            "\nThen edit vault paths to match your system."
         )
-        sys.exit(1)
 
     with config_path.open() as f:
         data = yaml.safe_load(f)

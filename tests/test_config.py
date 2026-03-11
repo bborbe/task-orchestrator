@@ -80,9 +80,9 @@ def test_load_config_optional_overrides(tmp_path: Path) -> None:
     assert config.port == 9000
 
 
-def test_load_config_missing_file_exits(tmp_path: Path) -> None:
-    """load_config exits with error when config.yaml is missing."""
-    with pytest.raises(SystemExit):
+def test_load_config_missing_file_raises(tmp_path: Path) -> None:
+    """load_config raises FileNotFoundError when config.yaml is missing."""
+    with pytest.raises(FileNotFoundError, match=r"config\.yaml not found"):
         load_config(tmp_path / "nonexistent.yaml")
 
 
