@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Updated README.md with Prerequisites section, correct make sync target, and config.yaml-based configuration documentation
+container: task-orchestrator-014-h-fix-readme
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:32:47Z"
+completed: "2026-03-11T21:33:30Z"
 ---
 <summary>
 - README install command matches actual Makefile target (sync, not install)
