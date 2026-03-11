@@ -2,9 +2,10 @@
 
 import asyncio
 import logging
+from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING
 
-from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 if TYPE_CHECKING:
     from task_orchestrator.obsidian.task_reader import TaskReader
@@ -19,14 +20,15 @@ class Session:
         """Initialize session with a Claude SDK client."""
         self.client = client
         self.messages: list[dict[str, str]] = []
+        self._stack = AsyncExitStack()
 
     async def start(self) -> None:
         """Initialize the Claude client session."""
-        await self.client.__aenter__()
+        await self._stack.enter_async_context(self.client)
 
     async def close(self) -> None:
         """Close the Claude client session."""
-        await self.client.__aexit__(None, None, None)
+        await self._stack.aclose()
 
 
 class SessionManager:
@@ -59,6 +61,7 @@ class SessionManager:
     async def _consume_session_messages(
         self,
         client: ClaudeSDKClient,
+        stack: AsyncExitStack,
         session_id: str,
         started_consuming: asyncio.Event,
         task_id: str | None = None,
@@ -104,7 +107,7 @@ class SessionManager:
         finally:
             # Always clean up client context
             try:
-                await client.__aexit__(None, None, None)
+                await stack.aclose()
                 logger.info(f"Cleaned up client for session {session_id}")
             except Exception as e:
                 logger.error(f"Error cleaning up client for {session_id}: {e}")
@@ -135,12 +138,12 @@ class SessionManager:
         Returns:
             session_id
         """
-        from claude_code_sdk import AssistantMessage, SystemMessage
+        from claude_agent_sdk import AssistantMessage, SystemMessage
 
         options = (
-            ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits", cwd=cwd)
+            ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="acceptEdits", cwd=cwd)
             if cwd
-            else ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits")
+            else ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="acceptEdits")
         )
         client = ClaudeSDKClient(options=options)
         session_id: str | None = None
@@ -149,7 +152,8 @@ class SessionManager:
         logger.info(f"Starting session: {prompt} (cwd={cwd})")
 
         # Enter async context but don't use 'with' - we'll manage cleanup manually
-        await client.__aenter__()
+        stack = AsyncExitStack()
+        await stack.enter_async_context(client)
 
         try:
             await client.query(prompt)
@@ -188,7 +192,12 @@ class SessionManager:
                     started_consuming = asyncio.Event()
                     background_task = asyncio.create_task(
                         self._consume_session_messages(
-                            client, current_session_id, started_consuming, task_id, task_reader
+                            client,
+                            stack,
+                            current_session_id,
+                            started_consuming,
+                            task_id,
+                            task_reader,
                         ),
                         name=f"session-{current_session_id}",
                     )
@@ -209,7 +218,7 @@ class SessionManager:
 
         except Exception:
             # On error, clean up properly
-            await client.__aexit__(None, None, None)
+            await stack.aclose()
             raise
 
         return session_id
@@ -224,12 +233,12 @@ class SessionManager:
         Returns:
             Tuple of (session_id, response_text)
         """
-        from claude_code_sdk import AssistantMessage, SystemMessage, TextBlock
+        from claude_agent_sdk import AssistantMessage, SystemMessage, TextBlock
 
         options = (
-            ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits", cwd=cwd)
+            ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="acceptEdits", cwd=cwd)
             if cwd
-            else ClaudeCodeOptions(model="sonnet", permission_mode="acceptEdits")
+            else ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="acceptEdits")
         )
         client = ClaudeSDKClient(options=options)
         session_id: str | None = None

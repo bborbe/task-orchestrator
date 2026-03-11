@@ -6,7 +6,7 @@ These tests make real API calls to Claude and require API credentials.
 import uuid
 
 import pytest
-from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 from task_orchestrator.claude.session_manager import SessionManager
 
@@ -22,7 +22,7 @@ async def test_create_session_and_send_prompt() -> None:
     session_id = str(uuid.uuid4())
 
     # Create session
-    options = ClaudeCodeOptions(permission_mode="acceptEdits")
+    options = ClaudeAgentOptions(permission_mode="acceptEdits")
     client = ClaudeSDKClient(options=options)
     session = await manager.create_session(session_id, client)
 
@@ -69,7 +69,7 @@ async def test_multiple_prompts_in_session() -> None:
     manager = SessionManager()
 
     session_id = str(uuid.uuid4())
-    options = ClaudeCodeOptions(permission_mode="acceptEdits")
+    options = ClaudeAgentOptions(permission_mode="acceptEdits")
     client = ClaudeSDKClient(options=options)
     session = await manager.create_session(session_id, client)
 
