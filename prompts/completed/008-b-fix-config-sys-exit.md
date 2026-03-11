@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced sys.exit(1) in load_config() with FileNotFoundError, moved wiring into main() for catchability, and updated the test to expect FileNotFoundError
+container: task-orchestrator-008-b-fix-config-sys-exit
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:27:10Z"
+completed: "2026-03-11T21:28:29Z"
 ---
 <summary>
 - Config loading raises FileNotFoundError instead of calling sys.exit, making it testable
