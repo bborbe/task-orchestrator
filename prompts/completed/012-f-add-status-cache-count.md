@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added StatusCache.count() public method and replaced both cache._cache private accesses in reload_cache() with it
+container: task-orchestrator-012-f-add-status-cache-count
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:31:24Z"
+completed: "2026-03-11T21:32:05Z"
 ---
 <summary>
 - StatusCache exposes a public count method for querying cached item counts
