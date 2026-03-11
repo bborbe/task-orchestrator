@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Deleted dead executor.py module and removed get_executor() and its import from factory.py
+container: task-orchestrator-010-d-delete-dead-executor
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:29:52Z"
+completed: "2026-03-11T21:30:32Z"
 ---
 <summary>
 - The dead executor module is removed (replaced by SessionManager)
