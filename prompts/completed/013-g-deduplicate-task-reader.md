@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Extracted _read_file helper and delegated update_task_phase to _update_task_frontmatter, eliminating duplicated UTF-8/latin-1 fallback read logic in ObsidianTaskReader
+container: task-orchestrator-013-g-deduplicate-task-reader
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:32:07Z"
+completed: "2026-03-11T21:32:45Z"
 ---
 <summary>
 - Duplicate frontmatter update code in update_task_phase is eliminated
