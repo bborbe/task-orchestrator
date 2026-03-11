@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.8
+- refactor: Remove dead `create_claude_client_factory()` from `factory.py` and update integration tests to construct `ClaudeSDKClient` directly
+- fix: Add `exc_info=True` to `stop_task_watchers()` error log for full stack traces on watcher shutdown failures
+
 ## v0.7.7
 - refactor: Delete dead `executor.py` module (`ClaudeExecutor`, `ClaudeCodeExecutor`) and remove `get_executor()` from factory; `SessionManager` is the sole session management mechanism
 

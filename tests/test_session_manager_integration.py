@@ -6,24 +6,24 @@ These tests make real API calls to Claude and require API credentials.
 import uuid
 
 import pytest
+from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
 
 from task_orchestrator.claude.session_manager import SessionManager
-from task_orchestrator.factory import create_claude_client_factory
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_create_session_and_send_prompt() -> None:
     """Test creating a session and sending a simple prompt."""
-    # Create session manager and client factory
+    # Create session manager and client
     manager = SessionManager()
-    factory = create_claude_client_factory()
 
     # Generate session ID
     session_id = str(uuid.uuid4())
 
     # Create session
-    client = factory()
+    options = ClaudeCodeOptions(permission_mode="acceptEdits")
+    client = ClaudeSDKClient(options=options)
     session = await manager.create_session(session_id, client)
 
     assert session is not None
@@ -67,10 +67,10 @@ async def test_session_not_found() -> None:
 async def test_multiple_prompts_in_session() -> None:
     """Test sending multiple prompts to the same session."""
     manager = SessionManager()
-    factory = create_claude_client_factory()
 
     session_id = str(uuid.uuid4())
-    client = factory()
+    options = ClaudeCodeOptions(permission_mode="acceptEdits")
+    client = ClaudeSDKClient(options=options)
     session = await manager.create_session(session_id, client)
 
     try:

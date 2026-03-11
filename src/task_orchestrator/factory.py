@@ -6,7 +6,6 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -52,20 +51,6 @@ def get_vault_config(vault_name: str) -> VaultConfig:
     if not vault:
         raise ValueError(f"Unknown vault: {vault_name}")
     return vault
-
-
-def create_claude_client_factory() -> Callable[[], ClaudeSDKClient]:
-    """Create a factory function for Claude SDK clients.
-
-    Returns a callable that creates new ClaudeSDKClient instances.
-    Each call returns a fresh client for use in async context managers.
-    """
-
-    def factory() -> ClaudeSDKClient:
-        options = ClaudeCodeOptions(permission_mode="acceptEdits")
-        return ClaudeSDKClient(options=options)
-
-    return factory
 
 
 def get_connection_manager() -> ConnectionManager:
@@ -150,7 +135,7 @@ def stop_task_watchers() -> None:
             watcher.stop()
             logger.info(f"[Factory] Stopped watcher for vault: {vault_name}")
         except Exception as e:
-            logger.error(f"[Factory] Failed to stop watcher for {vault_name}: {e}")
+            logger.error(f"[Factory] Failed to stop watcher for {vault_name}: {e}", exc_info=True)
     _watchers.clear()
 
 
