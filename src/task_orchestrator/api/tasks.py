@@ -3,8 +3,11 @@
 # FastAPI Depends pattern is safe in function signatures
 
 import asyncio
+import json
 import logging
+import re
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import quote
 
@@ -15,6 +18,7 @@ from task_orchestrator.api.models import SessionResponse, Task, TaskResponse
 from task_orchestrator.config import VaultConfig
 from task_orchestrator.factory import (
     get_config,
+    get_status_cache,
     get_task_reader_for_vault,
     get_vault_config,
 )
@@ -160,8 +164,6 @@ async def list_tasks(
         ]
 
         # Filter out blocked tasks (use cache for fast lookup)
-        from task_orchestrator.factory import get_status_cache
-
         cache = get_status_cache()
         unblocked_tasks = []
 
@@ -373,9 +375,6 @@ async def execute_slash_command(
         )
 
         # Parse response for success/failure
-        import json
-        import re
-
         success = None
         error_message = None
 
@@ -521,10 +520,6 @@ async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[s
     Raises:
         HTTPException: If vault not found
     """
-    from pathlib import Path
-
-    from task_orchestrator.factory import get_config, get_status_cache
-
     cache = get_status_cache()
     config = get_config()
 

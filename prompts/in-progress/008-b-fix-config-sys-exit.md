@@ -1,6 +1,7 @@
 ---
-status: created
+status: approved
 created: "2026-03-11T22:00:00Z"
+queued: "2026-03-11T21:25:02Z"
 ---
 <summary>
 - Config loading raises FileNotFoundError instead of calling sys.exit, making it testable

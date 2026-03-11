@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.4
+- refactor: Move all function-body imports in `tasks.py` to module level and add `get_status_cache` to factory import block
+
 ## v0.7.3
 - refactor: Add command routing comment and 400 guard for unknown commands in `execute_slash_command`; replace generic else prompt with explicit `work-on-task` branch
 
