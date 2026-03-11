@@ -531,7 +531,7 @@ async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[s
 
         vault_path = Path(vault_config.vault_path)
         cache.load_vault(vault, vault_path, vault_config.tasks_folder)
-        count = len(cache._cache.get(vault, {}))
+        count = cache.count(vault)
         return {"reloaded": [vault], "counts": {vault: count}}
 
     # Reload all vaults
@@ -540,7 +540,7 @@ async def reload_cache(vault: str | None = None) -> dict[str, list[str] | dict[s
     for vault_config in config.vaults:
         vault_path = Path(vault_config.vault_path)
         cache.load_vault(vault_config.name, vault_path, vault_config.tasks_folder)
-        count = len(cache._cache.get(vault_config.name, {}))
+        count = cache.count(vault_config.name)
         reloaded.append(vault_config.name)
         counts[vault_config.name] = count
 

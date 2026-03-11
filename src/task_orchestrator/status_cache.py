@@ -88,6 +88,17 @@ class StatusCache:
         """
         return self._cache.get(vault_name, {}).get(item_id)
 
+    def count(self, vault_name: str) -> int:
+        """Get number of cached items for a vault.
+
+        Args:
+            vault_name: Name of the vault
+
+        Returns:
+            Number of cached items, 0 if vault not loaded
+        """
+        return len(self._cache.get(vault_name, {}))
+
     def invalidate(self, vault_name: str, item_id: str) -> None:
         """Invalidate single item - reload from disk.
 
