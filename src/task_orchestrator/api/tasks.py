@@ -340,6 +340,7 @@ async def execute_slash_command(
                 working_dir=vault_config.vault_path,
                 task_title=task.title,
                 response=stdout.decode(),
+                success=True,
             )
 
         if request.command not in ("work-on-task", "create-task"):
