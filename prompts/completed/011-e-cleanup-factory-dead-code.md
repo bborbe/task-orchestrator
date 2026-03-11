@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Removed create_claude_client_factory() from factory.py, updated integration tests to construct ClaudeSDKClient directly, and added exc_info=True to stop_task_watchers() error log.
+container: task-orchestrator-011-e-cleanup-factory-dead-code
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:30:35Z"
+completed: "2026-03-11T21:31:22Z"
 ---
 <summary>
 - The unused client factory function is removed from the factory module
