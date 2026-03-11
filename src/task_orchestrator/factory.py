@@ -10,7 +10,6 @@ from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from task_orchestrator.claude.executor import ClaudeCodeExecutor, ClaudeExecutor
 from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
@@ -53,12 +52,6 @@ def get_vault_config(vault_name: str) -> VaultConfig:
     if not vault:
         raise ValueError(f"Unknown vault: {vault_name}")
     return vault
-
-
-def get_executor() -> ClaudeExecutor:
-    """Create ClaudeExecutor for dependency injection."""
-    config = get_config()
-    return ClaudeCodeExecutor(config.claude_cli)
 
 
 def create_claude_client_factory() -> Callable[[], ClaudeSDKClient]:

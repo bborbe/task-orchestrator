@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.7
+- refactor: Delete dead `executor.py` module (`ClaudeExecutor`, `ClaudeCodeExecutor`) and remove `get_executor()` from factory; `SessionManager` is the sole session management mechanism
+
 ## v0.7.6
 - fix: Snapshot `active_connections` before iteration in `broadcast()` to prevent `RuntimeError` on concurrent mutation; add `exc_info=True` to failed-send warnings in `broadcast()` and `send_personal()`
 
