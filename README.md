@@ -10,6 +10,13 @@ Orchestrate Claude Code sessions from Obsidian tasks.
 - Session handoff via session ID
 - Dark theme interface
 
+## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
+- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` command)
+- An Obsidian vault with tasks in frontmatter format
+
 ## Installation
 
 ```bash
@@ -33,7 +40,7 @@ Then open http://127.0.0.1:8000
 ## Development
 
 ```bash
-make install     # Install dependencies
+make sync        # Install dependencies
 make format      # Format code
 make lint        # Lint code
 make typecheck   # Type check
@@ -43,13 +50,23 @@ make precommit   # Run all checks
 
 ## Configuration
 
-Set via environment variables:
-- `VAULT_PATH` - Path to Obsidian vault (default: `/Users/bborbe/Documents/Obsidian/Personal`)
-- `VAULT_NAME` - Obsidian vault name (default: `Personal`)
-- `TASKS_FOLDER` - Tasks folder name (default: `24 Tasks`)
-- `CLAUDE_CLI` - Claude CLI command (default: `claude`)
-- `HOST` - Server host (default: `127.0.0.1`)
-- `PORT` - Server port (default: `8000`)
+Copy the example config and edit vault paths:
+```bash
+cp config.yaml.example config.yaml
+```
+
+**Top-level fields:**
+- `claude_cli` - Claude CLI command (default: `claude`)
+- `host` - Server host (default: `127.0.0.1`)
+- `port` - Server port (default: `8000`)
+
+**Per-vault fields** (under `vaults:`):
+- `name` - Display name for the vault
+- `vault_path` - Absolute path to the Obsidian vault
+- `vault_name` - Vault name for `obsidian://` URLs
+- `tasks_folder` - Folder containing task files (e.g., `"24 Tasks"`)
+- `claude_script` - Script to run Claude sessions (default: `claude`)
+- `vault_cli_path` - Path to vault-cli binary (default: `vault-cli`)
 
 ## Task Format
 

@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.11
+- docs: Update README with Prerequisites section, correct `make sync` target, and config.yaml-based configuration documentation
+
 ## v0.7.10
 - refactor: Extract `_read_file` helper in `ObsidianTaskReader` and delegate `update_task_phase` to `_update_task_frontmatter`, eliminating duplicated UTF-8/latin-1 fallback read logic
 
