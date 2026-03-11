@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Migrated from claude-code-sdk to claude-agent-sdk, renamed ClaudeCodeOptions to ClaudeAgentOptions, replaced direct __aenter__/__aexit__ calls with AsyncExitStack, and updated model alias to explicit claude-sonnet-4-5
+container: task-orchestrator-015-i-migrate-claude-agent-sdk
+dark-factory-version: v0.44.0
 created: "2026-03-11T22:00:00Z"
 queued: "2026-03-11T21:25:02Z"
+started: "2026-03-11T21:33:33Z"
+completed: "2026-03-11T21:35:26Z"
 ---
 <summary>
 - Project migrates from deprecated claude-code-sdk to claude-agent-sdk
