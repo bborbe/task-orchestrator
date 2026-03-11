@@ -49,16 +49,18 @@ class ConnectionManager:
             return
 
         message_json = json.dumps(message)
-        num_clients = len(self.active_connections)
+        # Snapshot to avoid mutation during iteration
+        connections = list(self.active_connections)
+        num_clients = len(connections)
         logger.debug(f"[ConnectionManager] Broadcasting to {num_clients} clients: {message_json}")
 
         # Send to all connections, remove dead ones
         dead_connections = []
-        for connection in self.active_connections:
+        for connection in connections:
             try:
                 await connection.send_text(message_json)
             except Exception as e:
-                logger.warning(f"[ConnectionManager] Failed to send to client: {e}")
+                logger.warning(f"[ConnectionManager] Failed to send to client: {e}", exc_info=True)
                 dead_connections.append(connection)
 
         # Clean up dead connections
@@ -75,5 +77,7 @@ class ConnectionManager:
         try:
             await websocket.send_text(json.dumps(message))
         except Exception as e:
-            logger.warning(f"[ConnectionManager] Failed to send personal message: {e}")
+            logger.warning(
+                f"[ConnectionManager] Failed to send personal message: {e}", exc_info=True
+            )
             self.disconnect(websocket)
