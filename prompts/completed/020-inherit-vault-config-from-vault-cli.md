@@ -1,10 +1,12 @@
 ---
-status: executing
+status: completed
+summary: Replaced vault config discovery with vault-cli subprocess call in load_config(), updated config.yaml/config.yaml.example to slim dict format, removed dead claude_cli field, rewrote test_config.py for new format
 container: task-orchestrator-020-inherit-vault-config-from-vault-cli
 dark-factory-version: v0.54.0
 created: "2026-03-12T17:00:00Z"
 queued: "2026-03-12T16:59:28Z"
 started: "2026-03-12T17:42:41Z"
+completed: "2026-03-12T17:46:47Z"
 ---
 <summary>
 - Task-orch discovers vault names, paths, and tasks_folder from vault-cli at startup
