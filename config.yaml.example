@@ -1,16 +1,11 @@
+vault_cli_path: vault-cli  # optional, defaults to "vault-cli"
+host: 127.0.0.1
+port: 8000
 vaults:
-  - name: Personal
-    vault_path: /Users/yourname/Documents/Obsidian/Personal
-    vault_name: Personal
-    tasks_folder: "24 Tasks"
+  personal:
     claude_script: claude-obsidian-personal.sh
-  - name: Brogrammers
-    vault_path: /Users/yourname/Documents/Obsidian/Brogrammers
-    vault_name: Brogrammers
-    tasks_folder: "40 Tasks"
+  brogrammers:
     claude_script: claude-obsidian-brogrammers.sh
-
-# Optional overrides (these are the defaults)
-#claude_cli: claude
-#host: 127.0.0.1
-#port: 8000
+    vault_name: Brogrammers  # optional, defaults to name.title()
+  family:
+    claude_script: claude

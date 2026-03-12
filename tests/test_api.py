@@ -28,7 +28,6 @@ def test_client(
                 tasks_folder="24 Tasks",
             )
         ],
-        claude_cli="claude",
         host="127.0.0.1",
         port=8000,
     )
@@ -258,7 +257,6 @@ Task in vault 2
                 tasks_folder="24 Tasks",
             ),
         ],
-        claude_cli="claude",
         host="127.0.0.1",
         port=8000,
     )
@@ -335,7 +333,6 @@ Task in vault 2
                 tasks_folder="24 Tasks",
             ),
         ],
-        claude_cli="claude",
         host="127.0.0.1",
         port=8000,
     )
@@ -427,7 +424,6 @@ Task in vault 3
                 tasks_folder="24 Tasks",
             ),
         ],
-        claude_cli="claude",
         host="127.0.0.1",
         port=8000,
     )
@@ -693,7 +689,6 @@ def test_execute_vault_cli_uses_configured_path(
                 vault_cli_path="/usr/local/bin/vault-cli",
             )
         ],
-        claude_cli="claude",
         host="127.0.0.1",
         port=8000,
     )

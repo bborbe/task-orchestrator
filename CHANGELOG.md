@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.11.0
+- feat: Discover vault `path`, `tasks_dir` from `vault-cli config list --output json` at startup instead of duplicating them in `config.yaml`; task-orch config now only holds orch-specific overrides (`claude_script`, `vault_name`)
+- refactor: Remove dead `claude_cli` field from `Config` dataclass
+
 ## v0.10.1
 - refactor: Remove duplicate `stale_session_cleaner.py` module and its wiring from `factory.py`
 - fix: Use exact vault name (no `.lower()`) in `cleanup.py` vault-cli args to support mixed-case vault names like "Family"

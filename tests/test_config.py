@@ -1,30 +1,33 @@
 """Tests for config loading."""
 
-import textwrap
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from task_orchestrator.config import load_config
 
 
+def _mock_run(vaults: list[dict] | None = None) -> MagicMock:
+    """Return a mock subprocess.run result."""
+    mock = MagicMock()
+    mock.returncode = 0
+    mock.stdout = json.dumps(vaults if vaults is not None else [])
+    mock.stderr = ""
+    return mock
+
+
 def test_load_config_reads_vaults(tmp_path: Path) -> None:
-    """load_config parses vaults from YAML."""
+    """load_config parses vaults from YAML config dict format."""
+    cli_vaults = [{"name": "personal", "path": "/some/path/Personal", "tasks_dir": "24 Tasks"}]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text(
-        textwrap.dedent("""\
-            vaults:
-              - name: Personal
-                vault_path: /some/path/Personal
-                vault_name: Personal
-                tasks_folder: "24 Tasks"
-                claude_script: claude-personal.sh
-        """)
-    )
-    config = load_config(config_file)
+    config_file.write_text("vaults:\n  personal:\n    claude_script: claude-personal.sh\n")
+    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+        config = load_config(config_file)
     assert len(config.vaults) == 1
     vault = config.vaults[0]
-    assert vault.name == "Personal"
+    assert vault.name == "personal"
     assert vault.vault_path == "/some/path/Personal"
     assert vault.vault_name == "Personal"
     assert vault.tasks_folder == "24 Tasks"
@@ -33,49 +36,37 @@ def test_load_config_reads_vaults(tmp_path: Path) -> None:
 
 def test_load_config_multiple_vaults(tmp_path: Path) -> None:
     """load_config parses multiple vaults."""
+    cli_vaults = [
+        {"name": "personal", "path": "/personal", "tasks_dir": "Tasks"},
+        {"name": "work", "path": "/work", "tasks_dir": "Tasks"},
+    ]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text(
-        textwrap.dedent("""\
-            vaults:
-              - name: A
-                vault_path: /a
-                vault_name: A
-                tasks_folder: Tasks
-              - name: B
-                vault_path: /b
-                vault_name: B
-                tasks_folder: Tasks
-        """)
-    )
-    config = load_config(config_file)
+    config_file.write_text("vaults:\n  personal: {}\n  work: {}\n")
+    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+        config = load_config(config_file)
     assert len(config.vaults) == 2
-    assert config.vaults[0].name == "A"
-    assert config.vaults[1].name == "B"
+    assert config.vaults[0].name == "personal"
+    assert config.vaults[1].name == "work"
 
 
 def test_load_config_defaults(tmp_path: Path) -> None:
-    """load_config uses defaults for optional fields."""
+    """load_config uses defaults for optional host/port fields."""
+    cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("vaults: []\n")
-    config = load_config(config_file)
-    assert config.claude_cli == "claude"
+    config_file.write_text("vaults:\n  personal: {}\n")
+    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+        config = load_config(config_file)
     assert config.host == "127.0.0.1"
     assert config.port == 8000
 
 
 def test_load_config_optional_overrides(tmp_path: Path) -> None:
-    """load_config respects optional overrides."""
+    """load_config respects optional host/port overrides."""
+    cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text(
-        textwrap.dedent("""\
-            vaults: []
-            claude_cli: /usr/local/bin/claude
-            host: 0.0.0.0
-            port: 9000
-        """)
-    )
-    config = load_config(config_file)
-    assert config.claude_cli == "/usr/local/bin/claude"
+    config_file.write_text("vaults:\n  personal: {}\nhost: 0.0.0.0\nport: 9000\n")
+    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+        config = load_config(config_file)
     assert config.host == "0.0.0.0"
     assert config.port == 9000
 
@@ -88,22 +79,15 @@ def test_load_config_missing_file_raises(tmp_path: Path) -> None:
 
 def test_get_vault_returns_correct_vault(tmp_path: Path) -> None:
     """Config.get_vault finds vault by name."""
+    cli_vaults = [
+        {"name": "personal", "path": "/personal", "tasks_dir": "Tasks"},
+        {"name": "work", "path": "/work", "tasks_dir": "Tasks"},
+    ]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text(
-        textwrap.dedent("""\
-            vaults:
-              - name: Personal
-                vault_path: /personal
-                vault_name: Personal
-                tasks_folder: Tasks
-              - name: Work
-                vault_path: /work
-                vault_name: Work
-                tasks_folder: Tasks
-        """)
-    )
-    config = load_config(config_file)
-    assert config.get_vault("Personal") is not None
-    assert config.get_vault("Personal").vault_path == "/personal"  # type: ignore[union-attr]
-    assert config.get_vault("Work") is not None
-    assert config.get_vault("Missing") is None
+    config_file.write_text("vaults:\n  personal: {}\n  work: {}\n")
+    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+        config = load_config(config_file)
+    assert config.get_vault("personal") is not None
+    assert config.get_vault("personal").vault_path == "/personal"
+    assert config.get_vault("work") is not None
+    assert config.get_vault("missing") is None

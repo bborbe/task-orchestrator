@@ -42,7 +42,7 @@ class Config:
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
 
-def discover_vaults_from_cli(vault_cli_path: str) -> list[dict]:
+def discover_vaults_from_cli(vault_cli_path: str) -> list[dict[str, str]]:
     """Call vault-cli config list --output json and return parsed vault list."""
     result = subprocess.run(
         [vault_cli_path, "config", "list", "--output", "json"],
