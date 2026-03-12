@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.12.3
+- refactor: Replace `ObsidianTaskReader` direct file access with `VaultCLIClient` async subprocess wrapper for all task list/read/update operations; remove `task_reader.py`
+
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
 * MAJOR version when you make incompatible API changes,

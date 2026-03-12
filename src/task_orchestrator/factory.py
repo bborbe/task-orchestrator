@@ -12,9 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from task_orchestrator.cleanup import run_cleanup_loop
 from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
-from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
 from task_orchestrator.status_cache import StatusCache
+from task_orchestrator.vault_cli_client import VaultCLIClient
 from task_orchestrator.websocket.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -37,13 +37,13 @@ def get_config() -> Config:
     return _config
 
 
-def get_task_reader_for_vault(vault_name: str) -> TaskReader:
-    """Create task reader for specific vault."""
+def get_vault_cli_client_for_vault(vault_name: str) -> VaultCLIClient:
+    """Create VaultCLIClient for specific vault."""
     config = get_config()
     vault = config.get_vault(vault_name)
     if not vault:
         raise ValueError(f"Unknown vault: {vault_name}")
-    return ObsidianTaskReader(vault.vault_path, vault.tasks_folder)
+    return VaultCLIClient(vault.vault_cli_path, vault.name)
 
 
 def get_vault_config(vault_name: str) -> VaultConfig:

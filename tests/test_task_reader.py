@@ -1,96 +1,213 @@
-"""Tests for ObsidianTaskReader."""
+"""Tests for VaultCLIClient."""
 
-from pathlib import Path
+import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from task_orchestrator.obsidian.task_reader import ObsidianTaskReader
+from task_orchestrator.vault_cli_client import VaultCLIClient
 
 
-def test_list_tasks_empty(tmp_vault: Path) -> None:
-    """Test listing tasks from empty vault."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    tasks = reader.list_tasks()
-    assert len(tasks) == 0
+def _make_proc(returncode: int, stdout: bytes, stderr: bytes = b"") -> AsyncMock:
+    proc = AsyncMock()
+    proc.returncode = returncode
+    proc.communicate = AsyncMock(return_value=(stdout, stderr))
+    return proc
 
 
-def test_list_tasks_with_file(tmp_vault: Path, sample_task_file: Path) -> None:
-    """Test listing tasks with one file."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    tasks = reader.list_tasks()
+def _task_json(**kwargs: object) -> bytes:
+    task = {
+        "id": "Test Task",
+        "title": "Test Task",
+        "status": "in_progress",
+        "phase": "planning",
+        "project": "/Users/bborbe/Documents/workspaces/test-project",
+        "content": "# Success Criteria\n- Test should pass\n",
+        "description": "Test description",
+        "priority": 1,
+        "category": "testing",
+        "defer_date": "2026-01-01",
+        "planned_date": "2026-02-15",
+        "due_date": "2026-02-28",
+    }
+    task.update(kwargs)  # type: ignore[arg-type]
+    return json.dumps(task).encode()
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_empty() -> None:
+    """Test list_tasks returns empty list when vault-cli returns empty array."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"[]")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        tasks = await client.list_tasks()
+
+    assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_with_task() -> None:
+    """Test list_tasks parses a task correctly."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"[" + _task_json() + b"]")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        tasks = await client.list_tasks()
 
     assert len(tasks) == 1
     task = tasks[0]
     assert task.id == "Test Task"
-    assert task.title == "Test Task"  # Title is filename, not H1 heading
+    assert task.title == "Test Task"
     assert task.status == "in_progress"
     assert task.phase == "planning"
     assert task.project_path == "/Users/bborbe/Documents/workspaces/test-project"
 
 
-def test_list_tasks_status_filter(tmp_vault: Path, sample_task_file: Path) -> None:
-    """Test filtering tasks by status."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+@pytest.mark.asyncio
+async def test_list_tasks_single_status_filter() -> None:
+    """Test list_tasks passes --status when single status filter given."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"[]")
 
-    # Should find in_progress task
-    in_progress_tasks = reader.list_tasks(status_filter=["in_progress"])
-    assert len(in_progress_tasks) == 1
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        await client.list_tasks(status_filter=["todo"])
 
-    # Should not find completed tasks
-    completed_tasks = reader.list_tasks(status_filter=["completed"])
-    assert len(completed_tasks) == 0
+    args = mock_exec.call_args[0]
+    assert "--status" in args
+    assert "todo" in args
 
 
-def test_read_task(tmp_vault: Path, sample_task_file: Path) -> None:
-    """Test reading specific task."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    task = reader.read_task("Test Task")
+@pytest.mark.asyncio
+async def test_list_tasks_multiple_status_filter_uses_all() -> None:
+    """Test list_tasks uses --all flag when multiple statuses requested."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = _task_json(status="in_progress")
+    proc = _make_proc(0, b"[" + task_data + b"]")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        tasks = await client.list_tasks(status_filter=["in_progress", "todo"])
+
+    args = mock_exec.call_args[0]
+    assert "--all" in args
+    assert "--status" not in args
+    # in_progress task should be in result
+    assert len(tasks) == 1
+    assert tasks[0].status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_multiple_status_filter_excludes_non_matching() -> None:
+    """Test list_tasks filters out tasks not in status_filter when using --all."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = _task_json(status="completed")
+    proc = _make_proc(0, b"[" + task_data + b"]")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        tasks = await client.list_tasks(status_filter=["in_progress", "todo"])
+
+    # completed task should be filtered out
+    assert len(tasks) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_show_all() -> None:
+    """Test list_tasks uses --all when show_all=True."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"[]")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        await client.list_tasks(show_all=True)
+
+    args = mock_exec.call_args[0]
+    assert "--all" in args
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_failure_raises() -> None:
+    """Test list_tasks raises RuntimeError when vault-cli fails."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(1, b"", b"vault not found")
+
+    with (
+        patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)),
+        pytest.raises(RuntimeError, match="vault-cli task list failed"),
+    ):
+        await client.list_tasks()
+
+
+@pytest.mark.asyncio
+async def test_show_task_success() -> None:
+    """Test show_task returns parsed Task."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, _task_json())
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("Test Task")
 
     assert task.id == "Test Task"
-    assert task.title == "Test Task"  # Title is filename, not H1 heading
     assert task.status == "in_progress"
     assert task.phase == "planning"
     assert task.project_path == "/Users/bborbe/Documents/workspaces/test-project"
-    assert "Success Criteria" in task.content
+    assert task.defer_date == "2026-01-01"
+    assert task.planned_date == "2026-02-15"
+    assert task.due_date == "2026-02-28"
+    assert task.priority == 1
+    assert task.category == "testing"
 
 
-def test_read_task_not_found(tmp_vault: Path) -> None:
-    """Test reading non-existent task."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+@pytest.mark.asyncio
+async def test_show_task_not_found_raises_file_not_found() -> None:
+    """Test show_task raises FileNotFoundError when task not found."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(1, b"", b"task not found")
 
-    with pytest.raises(FileNotFoundError):
-        reader.read_task("NonExistent")
-
-
-def test_parse_task_without_project(tmp_vault: Path) -> None:
-    """Test parsing task without project field."""
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "No Project.md"
-
-    content = """---
-status: in_progress
-phase: in_progress
----
-
-# Impact
-Task without project field.
-"""
-
-    task_file.write_text(content)
-
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    task = reader.read_task("No Project")
-
-    assert task.id == "No Project"
-    assert task.status == "in_progress"
-    assert task.phase == "in_progress"
-    assert task.project_path is None
+    with (
+        patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)),
+        pytest.raises(FileNotFoundError, match="Task not found"),
+    ):
+        await client.show_task("NonExistent")
 
 
-def test_parse_task_with_dates_and_metadata(tmp_vault: Path, sample_task_file: Path) -> None:
-    """Test parsing task with date fields and metadata."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    task = reader.read_task("Test Task")
+@pytest.mark.asyncio
+async def test_set_field_success() -> None:
+    """Test set_field calls vault-cli task set with correct args."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        await client.set_field("task-1", "phase", "in_progress")
+
+    args = mock_exec.call_args[0]
+    assert "set" in args
+    assert "task-1" in args
+    assert "phase" in args
+    assert "in_progress" in args
+
+
+@pytest.mark.asyncio
+async def test_clear_field_success() -> None:
+    """Test clear_field calls vault-cli task clear with correct args."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, b"")
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        await client.clear_field("task-1", "claude_session_id")
+
+    args = mock_exec.call_args[0]
+    assert "clear" in args
+    assert "task-1" in args
+    assert "claude_session_id" in args
+
+
+@pytest.mark.asyncio
+async def test_parse_task_with_dates_and_metadata() -> None:
+    """Test _parse_task correctly parses date and metadata fields."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    proc = _make_proc(0, _task_json())
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("Test Task")
 
     assert task.defer_date == "2026-01-01"
     assert task.planned_date == "2026-02-15"
@@ -100,90 +217,57 @@ def test_parse_task_with_dates_and_metadata(tmp_vault: Path, sample_task_file: P
     assert task.recurring is None
 
 
-def test_update_task_phase(tmp_vault: Path, sample_task_file: Path) -> None:
-    """Test updating task phase."""
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+@pytest.mark.asyncio
+async def test_parse_task_without_project() -> None:
+    """Test _parse_task handles missing project field."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = json.dumps({"id": "No Project", "title": "No Project", "status": "in_progress"})
+    proc = _make_proc(0, task_data.encode())
 
-    # Update phase
-    reader.update_task_phase("Test Task", "in_progress")
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("No Project")
 
-    # Read back and verify
-    task = reader.read_task("Test Task")
-    assert task.phase == "in_progress"
-
-
-def test_parse_task_with_future_defer_date(tmp_vault: Path) -> None:
-    """Test parsing task with future defer date."""
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "Deferred Task.md"
-
-    content = """---
-status: in_progress
-phase: todo
-defer_date: 2026-05-01
----
-
-# Impact
-Task deferred until May.
-"""
-
-    task_file.write_text(content)
-
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
-    task = reader.read_task("Deferred Task")
-
-    assert task.id == "Deferred Task"
-    assert task.defer_date == "2026-05-01"
+    assert task.id == "No Project"
+    assert task.status == "in_progress"
+    assert task.project_path is None
 
 
-def test_normalize_status_variations(tmp_vault: Path) -> None:
-    """Test that status variations are normalized to in_progress."""
-    tasks_dir = tmp_vault / "24 Tasks"
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+@pytest.mark.asyncio
+async def test_parse_task_bool_priority_returns_none() -> None:
+    """Test that boolean priority values are rejected."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = json.dumps({"id": "t", "title": "t", "status": "todo", "priority": True})
+    proc = _make_proc(0, task_data.encode())
 
-    # Test all variations that should normalize to "in_progress"
-    status_variations = [
-        ("in_progress", "in_progress"),
-        ("in-progress", "in_progress"),
-        ("inprogress", "in_progress"),
-        ("current", "in_progress"),
-    ]
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("t")
 
-    for idx, (status_input, expected) in enumerate(status_variations):
-        task_file = tasks_dir / f"Task{idx}.md"
-        content = f"""---
-status: {status_input}
----
-
-# Task
-Test task with status: {status_input}
-"""
-        task_file.write_text(content)
-
-        task = reader.read_task(f"Task{idx}")
-        assert task.status == expected, (
-            f"Status '{status_input}' should normalize to '{expected}', got '{task.status}'"
-        )
+    assert task.priority is None
 
 
-def test_normalize_status_preserves_other_statuses(tmp_vault: Path) -> None:
-    """Test that other statuses are preserved as-is."""
-    tasks_dir = tmp_vault / "24 Tasks"
-    reader = ObsidianTaskReader(str(tmp_vault), "24 Tasks")
+@pytest.mark.asyncio
+async def test_parse_task_string_numeric_priority_converted() -> None:
+    """Test that numeric string priority is converted to int."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = json.dumps({"id": "t", "title": "t", "status": "todo", "priority": "2"})
+    proc = _make_proc(0, task_data.encode())
 
-    # Test that other statuses are not changed
-    other_statuses = ["todo", "completed", "backlog", "hold"]
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("t")
 
-    for idx, status in enumerate(other_statuses):
-        task_file = tasks_dir / f"OtherTask{idx}.md"
-        content = f"""---
-status: {status}
----
+    assert task.priority == 2
 
-# Task
-Test task with status: {status}
-"""
-        task_file.write_text(content)
 
-        task = reader.read_task(f"OtherTask{idx}")
-        assert task.status == status, f"Status '{status}' should be preserved, got '{task.status}'"
+@pytest.mark.asyncio
+async def test_parse_task_blocked_by_list() -> None:
+    """Test that blocked_by list is parsed correctly."""
+    client = VaultCLIClient("vault-cli", "TestVault")
+    task_data = json.dumps(
+        {"id": "t", "title": "t", "status": "todo", "blocked_by": ["[[Task A]]", "[[Task B]]"]}
+    )
+    proc = _make_proc(0, task_data.encode())
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        task = await client.show_task("t")
+
+    assert task.blocked_by == ["[[Task A]]", "[[Task B]]"]

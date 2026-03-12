@@ -18,7 +18,7 @@ from task_orchestrator.config import VaultConfig
 from task_orchestrator.factory import (
     get_config,
     get_status_cache,
-    get_task_reader_for_vault,
+    get_vault_cli_client_for_vault,
     get_vault_config,
 )
 
@@ -149,14 +149,14 @@ async def list_tasks(
     all_tasks: list[TaskResponse] = []
     for vault_name in vault_names:
         try:
-            reader = get_task_reader_for_vault(vault_name)
+            client = get_vault_cli_client_for_vault(vault_name)
             vault_config = get_vault_config(vault_name)
         except ValueError:
             # Skip invalid vaults
             continue
 
         # Get tasks
-        tasks = reader.list_tasks(status_filter=status_filter)
+        tasks = await client.list_tasks(status_filter=status_filter)
 
         # Filter by phase if specified (tasks with None/invalid phase default to todo)
         if phase_filter:
@@ -238,11 +238,11 @@ async def run_task(
     logger.info(f"run_task called: vault={vault}, task_id={task_id}")
 
     try:
-        reader = get_task_reader_for_vault(vault)
+        client = get_vault_cli_client_for_vault(vault)
         vault_config = get_vault_config(vault)
 
         # Read task
-        task = reader.read_task(task_id)
+        task = await client.show_task(task_id)
 
         logger.info(f"Starting vault-cli session for task {task_id}")
         session_id = await start_vault_cli_session(vault_config, task_id)
@@ -289,11 +289,11 @@ async def execute_slash_command(
     )
 
     try:
-        reader = get_task_reader_for_vault(vault)
+        client = get_vault_cli_client_for_vault(vault)
         vault_config = get_vault_config(vault)
 
         # Read task
-        task = reader.read_task(task_id)
+        task = await client.show_task(task_id)
 
         # Fast path (vault-cli, no AI session):
         #   - defer-task: vault-cli task defer
@@ -394,7 +394,6 @@ async def update_task_phase(
         HTTPException: If task not found or update fails
     """
     try:
-        get_task_reader_for_vault(vault)
         vault_config = get_vault_config(vault)
 
         proc = await asyncio.create_subprocess_exec(
@@ -444,8 +443,8 @@ async def clear_task_session(
         HTTPException: If task not found or update fails
     """
     try:
-        reader = get_task_reader_for_vault(vault)
-        await asyncio.to_thread(reader.update_task_session_id, task_id, None)
+        client = get_vault_cli_client_for_vault(vault)
+        await client.clear_field(task_id, "claude_session_id")
         return {"status": "success", "task_id": task_id}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

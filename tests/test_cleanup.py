@@ -1,6 +1,6 @@
 """Tests for stale session cleanup with assignee-aware logic."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -46,16 +46,16 @@ def _make_config(current_user: str = "alice") -> Config:
 
 
 async def _run_cleanup(config: Config, tasks: list[Task], session_file_exists: bool) -> int:
-    """Helper: run cleanup_stale_sessions with mocked reader and filesystem."""
-    mock_reader = MagicMock()
-    mock_reader.list_tasks.return_value = tasks
+    """Helper: run cleanup_stale_sessions with mocked VaultCLIClient and filesystem."""
+    mock_client = AsyncMock()
+    mock_client.list_tasks = AsyncMock(return_value=tasks)
 
     mock_proc = AsyncMock()
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"", b""))
 
     with (
-        patch("task_orchestrator.cleanup.ObsidianTaskReader", return_value=mock_reader),
+        patch("task_orchestrator.cleanup.VaultCLIClient", return_value=mock_client),
         patch("task_orchestrator.cleanup.Path.exists", return_value=session_file_exists),
         patch(
             "task_orchestrator.cleanup.asyncio.create_subprocess_exec",

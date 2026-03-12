@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from task_orchestrator.config import Config
-from task_orchestrator.obsidian.task_reader import ObsidianTaskReader
+from task_orchestrator.vault_cli_client import VaultCLIClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ async def cleanup_stale_sessions(config: Config) -> int:
     cleared = 0
     for vault in config.vaults:
         try:
-            reader = ObsidianTaskReader(vault.vault_path, vault.tasks_folder)
-            tasks = reader.list_tasks()
+            client = VaultCLIClient(vault.vault_cli_path, vault.name)
+            tasks = await client.list_tasks(show_all=True)
             tasks_with_session = [t for t in tasks if t.claude_session_id]
 
             project_dir = derive_claude_project_dir(vault.vault_path)

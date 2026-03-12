@@ -1,22 +1,107 @@
 """Tests for API endpoints."""
 
+from datetime import datetime
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from task_orchestrator.__main__ import create_app
+from task_orchestrator.api.models import Task
 from task_orchestrator.config import Config
+
+
+def _make_task(
+    task_id: str = "Test Task",
+    status: str = "in_progress",
+    phase: str | None = "planning",
+    project_path: str | None = "/Users/bborbe/Documents/workspaces/test-project",
+    defer_date: str | None = None,
+    planned_date: str | None = None,
+    due_date: str | None = None,
+    priority: int | str | None = 1,
+    category: str | None = "testing",
+    assignee: str | None = None,
+    blocked_by: list[str] | None = None,
+    **_kwargs: Any,
+) -> Task:
+    return Task(
+        id=task_id,
+        title=task_id,
+        status=status,
+        phase=phase,
+        project_path=project_path,
+        content="",
+        description=None,
+        modified_date=datetime(2026, 1, 1),
+        defer_date=defer_date,
+        planned_date=planned_date,
+        due_date=due_date,
+        priority=priority,
+        category=category,
+        recurring=None,
+        claude_session_id=None,
+        assignee=assignee,
+        blocked_by=blocked_by,
+    )
+
+
+def _make_sample_task() -> Task:
+    return _make_task(
+        task_id="Test Task",
+        status="in_progress",
+        phase="planning",
+        defer_date="2026-01-01",
+        planned_date="2026-02-15",
+        due_date="2026-02-28",
+    )
+
+
+def _make_vault_client(tasks: list[Task] | None = None) -> MagicMock:
+    """Create a mock VaultCLIClient backed by a mutable task list."""
+    task_list: list[Task] = list(tasks) if tasks is not None else [_make_sample_task()]
+    client = MagicMock()
+
+    async def _list_tasks(
+        status_filter: list[str] | None = None, show_all: bool = False
+    ) -> list[Task]:
+        result = list(task_list)
+        if status_filter is not None:
+            result = [t for t in result if t.status in status_filter]
+        return result
+
+    async def _show_task(task_id: str) -> Task:
+        for t in task_list:
+            if t.id == task_id:
+                return t
+        raise FileNotFoundError(f"Task not found: {task_id}")
+
+    client.list_tasks = AsyncMock(side_effect=_list_tasks)
+    client.show_task = AsyncMock(side_effect=_show_task)
+    client.clear_field = AsyncMock()
+    client.set_field = AsyncMock()
+    client._tasks = task_list
+    return client
+
+
+@pytest.fixture
+def mock_vault_client() -> MagicMock:
+    """Default mock VaultCLIClient with the standard sample task."""
+    return _make_vault_client()
 
 
 @pytest.fixture
 def test_client(
-    tmp_vault: Path, sample_task_file: Path, monkeypatch: pytest.MonkeyPatch
-) -> TestClient:
-    """Create test client with mocked config."""
+    tmp_vault: Path,
+    sample_task_file: Path,
+    mock_vault_client: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Create test client with mocked config and VaultCLIClient."""
     from task_orchestrator.config import VaultConfig
 
-    # Create test config with test vault
     test_config = Config(
         vaults=[
             VaultConfig(
@@ -30,13 +115,15 @@ def test_client(
         port=8000,
     )
 
-    # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
-    # Create app
     app = create_app()
 
-    return TestClient(app)
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        return_value=mock_vault_client,
+    ):
+        yield TestClient(app)
 
 
 def test_list_tasks_endpoint(test_client: TestClient) -> None:
@@ -66,11 +153,9 @@ def test_list_tasks_with_status_filter(test_client: TestClient) -> None:
 
 
 def test_run_task_endpoint_success(
-    test_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    test_client: TestClient,
 ) -> None:
     """Test POST /api/tasks/{id}/run endpoint success."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b'{"session_id": "test-session-id"}', b""))
@@ -84,10 +169,10 @@ def test_run_task_endpoint_success(
     assert "command" in data
     assert "working_dir" in data
     assert "task_title" in data
-    assert len(data["session_id"]) > 0  # Has a session ID
+    assert len(data["session_id"]) > 0
     assert "claude --resume" in data["command"]
     assert data["session_id"] in data["command"]
-    assert data["task_title"] == "Test Task"  # Should match task title
+    assert data["task_title"] == "Test Task"
 
 
 def test_run_task_endpoint_not_found(test_client: TestClient) -> None:
@@ -97,22 +182,13 @@ def test_run_task_endpoint_not_found(test_client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_run_task_endpoint_no_project(test_client: TestClient, tmp_vault: Path) -> None:
+def test_run_task_endpoint_no_project(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
     """Test POST /api/tasks/{id}/run with task missing project field - should still work."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    # Create task without project field
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "No Project Task.md"
-
-    content = """---
-status: todo
----
-
-Task without project.
-"""
-
-    task_file.write_text(content)
+    mock_vault_client._tasks.append(
+        _make_task(task_id="No Project Task", status="todo", project_path=None, priority=None)
+    )
 
     mock_proc = MagicMock()
     mock_proc.returncode = 0
@@ -121,87 +197,66 @@ Task without project.
     with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
         response = test_client.post("/api/tasks/No%20Project%20Task/run?vault=TestVault")
 
-    # Should succeed even without project field
     assert response.status_code == 200
     data = response.json()
     assert "session_id" in data
     assert "command" in data
 
 
-def test_list_tasks_filters_deferred(test_client: TestClient, tmp_vault: Path) -> None:
+def test_list_tasks_filters_deferred(test_client: TestClient, mock_vault_client: MagicMock) -> None:
     """Test that tasks with future defer_date are filtered out."""
-    # Create deferred task
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "Deferred Task.md"
-
-    content = """---
-status: in_progress
-phase: todo
-defer_date: 2026-05-01
----
-
-# Impact
-Task deferred until May.
-"""
-
-    task_file.write_text(content)
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Deferred Task", status="in_progress", phase="todo", defer_date="2026-05-01"
+        )
+    )
 
     response = test_client.get("/api/tasks?vault=TestVault")
 
     assert response.status_code == 200
     tasks = response.json()
 
-    # Deferred task should not be in results
     task_ids = [t["id"] for t in tasks]
     assert "Deferred Task" not in task_ids
 
 
-def test_list_tasks_includes_defer_date_today(test_client: TestClient, tmp_vault: Path) -> None:
+def test_list_tasks_includes_defer_date_today(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
     """Test that tasks with defer_date=today ARE included."""
     from datetime import date
 
-    # Create task deferred until today
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "Task Due Today.md"
-
     today = date.today().isoformat()
-    content = f"""---
-status: in_progress
-phase: todo
-defer_date: {today}
----
-
-Task due today should appear.
-"""
-
-    task_file.write_text(content)
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Due Today", status="in_progress", phase="todo", defer_date=today)
+    )
 
     response = test_client.get("/api/tasks?vault=TestVault")
 
     assert response.status_code == 200
     tasks = response.json()
 
-    # Task with defer_date=today SHOULD be in results
     task_ids = [t["id"] for t in tasks]
     assert "Task Due Today" in task_ids
 
 
-def test_list_tasks_defer_date_datetime_format(test_client: TestClient, tmp_vault: Path) -> None:
+def test_list_tasks_defer_date_datetime_format(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
     """Test that defer_date with full ISO datetime string is parsed correctly."""
-    tasks_dir = tmp_vault / "24 Tasks"
-
-    # Task with past datetime defer_date should be included
-    past_task = tasks_dir / "Past Datetime Deferred.md"
-    past_task.write_text(
-        "---\nstatus: in_progress\nphase: todo\n"
-        "defer_date: 2020-01-01T10:00:00+01:00\n---\n\nPast.\n"
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Past Datetime Deferred",
+            status="in_progress",
+            defer_date="2020-01-01T10:00:00+01:00",
+        )
     )
-
-    # Task with future datetime defer_date should be excluded
-    future_task = tasks_dir / "Future Datetime Deferred.md"
-    future_task.write_text(
-        "---\nstatus: in_progress\nphase: todo\n"
-        "defer_date: 2099-12-31T21:35:32.742132+01:00\n---\n\nFuture.\n"
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Future Datetime Deferred",
+            status="in_progress",
+            defer_date="2099-12-31T21:35:32.742132+01:00",
+        )
     )
 
     response = test_client.get("/api/tasks?vault=TestVault")
@@ -218,32 +273,9 @@ def test_list_tasks_no_vault_returns_all_vaults(
     """Test GET /api/tasks with no vault parameter returns tasks from all vaults."""
     from task_orchestrator.config import VaultConfig
 
-    # Create two test vaults
     vault1 = tmp_path / "vault1"
-    vault1_tasks = vault1 / "24 Tasks"
-    vault1_tasks.mkdir(parents=True)
-
     vault2 = tmp_path / "vault2"
-    vault2_tasks = vault2 / "24 Tasks"
-    vault2_tasks.mkdir(parents=True)
 
-    # Create task in vault1
-    task1 = vault1_tasks / "Task1.md"
-    task1.write_text("""---
-status: in_progress
----
-Task in vault 1
-""")
-
-    # Create task in vault2
-    task2 = vault2_tasks / "Task2.md"
-    task2.write_text("""---
-status: in_progress
----
-Task in vault 2
-""")
-
-    # Create test config with two vaults
     test_config = Config(
         vaults=[
             VaultConfig(
@@ -263,21 +295,28 @@ Task in vault 2
         port=8000,
     )
 
-    # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
-    # Create app
-    app = create_app()
-    client = TestClient(app)
+    task1 = _make_task(task_id="Task1", status="in_progress")
+    task2 = _make_task(task_id="Task2", status="in_progress")
+    clients = {
+        "Vault1": _make_vault_client([task1]),
+        "Vault2": _make_vault_client([task2]),
+    }
 
-    # Request without vault parameter
-    response = client.get("/api/tasks")
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vault_name: clients[vault_name],
+    ):
+        response = http_client.get("/api/tasks")
 
     assert response.status_code == 200
     tasks = response.json()
     task_ids = [t["id"] for t in tasks]
 
-    # Should contain tasks from both vaults
     assert "Task1" in task_ids
     assert "Task2" in task_ids
     assert len(task_ids) >= 2
@@ -287,32 +326,9 @@ def test_list_tasks_single_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     """Test GET /api/tasks with single vault parameter."""
     from task_orchestrator.config import VaultConfig
 
-    # Create two test vaults
     vault1 = tmp_path / "vault1"
-    vault1_tasks = vault1 / "24 Tasks"
-    vault1_tasks.mkdir(parents=True)
-
     vault2 = tmp_path / "vault2"
-    vault2_tasks = vault2 / "24 Tasks"
-    vault2_tasks.mkdir(parents=True)
 
-    # Create task in vault1
-    task1 = vault1_tasks / "Task1.md"
-    task1.write_text("""---
-status: in_progress
----
-Task in vault 1
-""")
-
-    # Create task in vault2
-    task2 = vault2_tasks / "Task2.md"
-    task2.write_text("""---
-status: in_progress
----
-Task in vault 2
-""")
-
-    # Create test config with two vaults
     test_config = Config(
         vaults=[
             VaultConfig(
@@ -332,21 +348,28 @@ Task in vault 2
         port=8000,
     )
 
-    # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
-    # Create app
-    app = create_app()
-    client = TestClient(app)
+    task1 = _make_task(task_id="Task1", status="in_progress")
+    task2 = _make_task(task_id="Task2", status="in_progress")
+    clients = {
+        "Vault1": _make_vault_client([task1]),
+        "Vault2": _make_vault_client([task2]),
+    }
 
-    # Request with vault=Vault1
-    response = client.get("/api/tasks?vault=Vault1")
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vault_name: clients[vault_name],
+    ):
+        response = http_client.get("/api/tasks?vault=Vault1")
 
     assert response.status_code == 200
     tasks = response.json()
     task_ids = [t["id"] for t in tasks]
 
-    # Should only contain task from Vault1
     assert "Task1" in task_ids
     assert "Task2" not in task_ids
 
@@ -355,42 +378,10 @@ def test_list_tasks_multiple_vaults(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     """Test GET /api/tasks with multiple vault parameters."""
     from task_orchestrator.config import VaultConfig
 
-    # Create three test vaults
     vault1 = tmp_path / "vault1"
-    vault1_tasks = vault1 / "24 Tasks"
-    vault1_tasks.mkdir(parents=True)
-
     vault2 = tmp_path / "vault2"
-    vault2_tasks = vault2 / "24 Tasks"
-    vault2_tasks.mkdir(parents=True)
-
     vault3 = tmp_path / "vault3"
-    vault3_tasks = vault3 / "24 Tasks"
-    vault3_tasks.mkdir(parents=True)
 
-    # Create tasks
-    task1 = vault1_tasks / "Task1.md"
-    task1.write_text("""---
-status: in_progress
----
-Task in vault 1
-""")
-
-    task2 = vault2_tasks / "Task2.md"
-    task2.write_text("""---
-status: in_progress
----
-Task in vault 2
-""")
-
-    task3 = vault3_tasks / "Task3.md"
-    task3.write_text("""---
-status: in_progress
----
-Task in vault 3
-""")
-
-    # Create test config
     test_config = Config(
         vaults=[
             VaultConfig(
@@ -418,149 +409,112 @@ Task in vault 3
 
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
-    app = create_app()
-    client = TestClient(app)
+    task1 = _make_task(task_id="Task1", status="in_progress")
+    task2 = _make_task(task_id="Task2", status="in_progress")
+    task3 = _make_task(task_id="Task3", status="in_progress")
+    clients = {
+        "Vault1": _make_vault_client([task1]),
+        "Vault2": _make_vault_client([task2]),
+        "Vault3": _make_vault_client([task3]),
+    }
 
-    # Request with vault=Vault1&vault=Vault2
-    response = client.get("/api/tasks?vault=Vault1&vault=Vault2")
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vault_name: clients[vault_name],
+    ):
+        response = http_client.get("/api/tasks?vault=Vault1&vault=Vault2")
 
     assert response.status_code == 200
     tasks = response.json()
     task_ids = [t["id"] for t in tasks]
 
-    # Should contain tasks from Vault1 and Vault2, but not Vault3
     assert "Task1" in task_ids
     assert "Task2" in task_ids
     assert "Task3" not in task_ids
 
 
-def test_list_tasks_with_assignee_filter(test_client: TestClient, tmp_vault: Path) -> None:
+def test_list_tasks_with_assignee_filter(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
     """Test GET /api/tasks with assignee filter."""
-    # Create tasks with different assignees
-    tasks_dir = tmp_vault / "24 Tasks"
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Assigned to Alice", status="in_progress", assignee="alice")
+    )
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Assigned to Bob", status="in_progress", assignee="bob")
+    )
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Unassigned", status="in_progress", assignee=None)
+    )
 
-    task1 = tasks_dir / "Task Assigned to Alice.md"
-    task1.write_text("""---
-status: in_progress
-assignee: alice
----
-Task for Alice
-""")
-
-    task2 = tasks_dir / "Task Assigned to Bob.md"
-    task2.write_text("""---
-status: in_progress
-assignee: bob
----
-Task for Bob
-""")
-
-    task3 = tasks_dir / "Task Unassigned.md"
-    task3.write_text("""---
-status: in_progress
----
-Task without assignee
-""")
-
-    # Filter by assignee=alice
     response = test_client.get("/api/tasks?vault=TestVault&assignee=alice")
 
     assert response.status_code == 200
     tasks = response.json()
     task_ids = [t["id"] for t in tasks]
 
-    # Should only contain Alice's task
     assert "Task Assigned to Alice" in task_ids
     assert "Task Assigned to Bob" not in task_ids
     assert "Task Unassigned" not in task_ids
 
 
 def test_list_tasks_phase_filter_none_only_in_todo(
-    test_client: TestClient, tmp_vault: Path
+    test_client: TestClient, mock_vault_client: MagicMock
 ) -> None:
     """Test that tasks with None phase only appear when filtering for todo."""
-    tasks_dir = tmp_vault / "24 Tasks"
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Without Phase", status="in_progress", phase=None)
+    )
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Todo", status="in_progress", phase="todo")
+    )
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task In Progress", status="in_progress", phase="in_progress")
+    )
 
-    # Task with no phase
-    task_no_phase = tasks_dir / "Task Without Phase.md"
-    task_no_phase.write_text("""---
-status: in_progress
----
-Task without phase field
-""")
-
-    # Task with todo phase
-    task_todo = tasks_dir / "Task Todo.md"
-    task_todo.write_text("""---
-status: in_progress
-phase: todo
----
-Task in todo
-""")
-
-    # Task with in_progress phase
-    task_in_progress = tasks_dir / "Task In Progress.md"
-    task_in_progress.write_text("""---
-status: in_progress
-phase: in_progress
----
-Task in progress
-""")
-
-    # Filter by phase=todo
     response = test_client.get("/api/tasks?vault=TestVault&phase=todo")
     assert response.status_code == 200
-    tasks = response.json()
-    task_ids = [t["id"] for t in tasks]
+    task_ids = [t["id"] for t in response.json()]
 
-    # Should include both None phase and todo phase
     assert "Task Without Phase" in task_ids
     assert "Task Todo" in task_ids
     assert "Task In Progress" not in task_ids
 
-    # Filter by phase=in_progress
     response = test_client.get("/api/tasks?vault=TestVault&phase=in_progress")
     assert response.status_code == 200
-    tasks = response.json()
-    task_ids = [t["id"] for t in tasks]
+    task_ids = [t["id"] for t in response.json()]
 
-    # Should NOT include None phase, only in_progress
     assert "Task Without Phase" not in task_ids
     assert "Task Todo" not in task_ids
     assert "Task In Progress" in task_ids
 
 
-def test_list_tasks_invalid_phase_treated_as_todo(test_client: TestClient, tmp_vault: Path) -> None:
+def test_list_tasks_invalid_phase_treated_as_todo(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
     """Test that tasks with invalid phase values are treated like None phase (default to todo)."""
-    tasks_dir = tmp_vault / "24 Tasks"
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Invalid Phase", status="in_progress", phase="banana")
+    )
 
-    # Task with invalid phase
-    task_invalid = tasks_dir / "Task Invalid Phase.md"
-    task_invalid.write_text("""---
-status: in_progress
-phase: banana
----
-Task with invalid phase
-""")
-
-    # Filter by phase=todo (should include invalid phases)
     response = test_client.get("/api/tasks?vault=TestVault&phase=todo")
     assert response.status_code == 200
     tasks = response.json()
     task_ids = [t["id"] for t in tasks]
 
-    # Invalid phase should be treated like None phase and included in todo filter
     assert "Task Invalid Phase" in task_ids
 
 
 def test_execute_defer_task_uses_vault_cli(
     test_client: TestClient,
-    sample_task_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that defer-task uses the vault-cli fast path instead of a Claude session."""
     from datetime import date, timedelta
-    from unittest.mock import AsyncMock, MagicMock, patch
 
     mock_proc = MagicMock()
     mock_proc.returncode = 0
@@ -594,12 +548,9 @@ def test_execute_defer_task_uses_vault_cli(
 
 def test_execute_complete_task_uses_vault_cli(
     test_client: TestClient,
-    sample_task_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that complete-task uses the vault-cli fast path instead of a Claude session."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"completed ok\n", b""))
@@ -630,12 +581,9 @@ def test_execute_complete_task_uses_vault_cli(
 
 def test_execute_vault_cli_failure_returns_500(
     test_client: TestClient,
-    sample_task_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that vault-cli failure (non-zero exit) returns HTTP 500 with stderr."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     mock_proc = MagicMock()
     mock_proc.returncode = 1
     mock_proc.communicate = AsyncMock(return_value=(b"", b"task not found\n"))
@@ -655,13 +603,7 @@ def test_execute_vault_cli_uses_configured_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that vault_cli_path from VaultConfig is used as the binary path."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     from task_orchestrator.config import VaultConfig
-
-    tasks_dir = tmp_vault / "24 Tasks"
-    task_file = tasks_dir / "My Task.md"
-    task_file.write_text("---\nstatus: todo\n---\nTask body\n")
 
     test_config = Config(
         vaults=[
@@ -679,19 +621,28 @@ def test_execute_vault_cli_uses_configured_path(
 
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
+    task = _make_task(task_id="My Task", status="todo")
+    mock_client = _make_vault_client([task])
+
     from fastapi.testclient import TestClient as TC
 
     from task_orchestrator.__main__ import create_app
 
     app = create_app()
-    client = TC(app)
+    http_client = TC(app)
 
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"ok\n", b""))
 
-    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
-        response = client.post(
+    with (
+        patch(
+            "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+            return_value=mock_client,
+        ),
+        patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec,
+    ):
+        response = http_client.post(
             "/api/tasks/My%20Task/execute-command?vault=MyVault",
             json={"command": "complete-task"},
         )
@@ -703,7 +654,6 @@ def test_execute_vault_cli_uses_configured_path(
 
 def test_execute_unknown_command_returns_400(
     test_client: TestClient,
-    sample_task_file: Path,
 ) -> None:
     """Test that an unknown command returns HTTP 400."""
     response = test_client.post(
@@ -718,12 +668,9 @@ def test_execute_unknown_command_returns_400(
 
 def test_update_task_phase_uses_vault_cli(
     test_client: TestClient,
-    sample_task_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that PATCH /tasks/{id}/phase uses vault-cli task set."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.communicate = AsyncMock(return_value=(b"", b""))
@@ -753,12 +700,9 @@ def test_update_task_phase_uses_vault_cli(
 
 def test_update_task_phase_vault_cli_failure_returns_500(
     test_client: TestClient,
-    sample_task_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that vault-cli failure during phase update returns HTTP 500."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     mock_proc = MagicMock()
     mock_proc.returncode = 1
     mock_proc.communicate = AsyncMock(return_value=(b"", b"phase update failed\n"))
@@ -774,7 +718,7 @@ def test_update_task_phase_vault_cli_failure_returns_500(
 
 
 def test_list_tasks_warns_on_status_phase_mismatch(
-    test_client: TestClient, tmp_vault: Path
+    test_client: TestClient, mock_vault_client: MagicMock
 ) -> None:
     """Test that tasks with status=in_progress but phase=null are still returned.
 
@@ -785,26 +729,17 @@ def test_list_tasks_warns_on_status_phase_mismatch(
 
     Proper fix: Ensure phase field matches status in task files.
     """
-    tasks_dir = tmp_vault / "24 Tasks"
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task Status Phase Mismatch", status="in_progress", phase=None)
+    )
 
-    # Task with status=in_progress but no phase field
-    task_no_phase = tasks_dir / "Task Status Phase Mismatch.md"
-    task_no_phase.write_text("""---
-status: in_progress
----
-Task with status in_progress but no phase field
-""")
-
-    # Request with phase filter that includes todo
     response = test_client.get("/api/tasks?vault=TestVault&status=in_progress&phase=todo")
     assert response.status_code == 200
     tasks = response.json()
 
-    # Task should be returned (null phase defaults to todo)
     task_ids = [t["id"] for t in tasks]
     assert "Task Status Phase Mismatch" in task_ids
 
-    # Verify the task has null phase (will appear in todo column on frontend)
     task = next(t for t in tasks if t["id"] == "Task Status Phase Mismatch")
     assert task["status"] == "in_progress"
-    assert task["phase"] is None  # Frontend will default this to 'todo'
+    assert task["phase"] is None
