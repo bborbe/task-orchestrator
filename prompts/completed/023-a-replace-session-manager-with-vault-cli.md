@@ -1,10 +1,12 @@
 ---
-status: executing
+status: completed
+summary: Replaced claude-agent-sdk SessionManager with vault-cli task work-on subprocess calls, removing the SDK dependency and claude/ package entirely
 container: task-orchestrator-023-a-replace-session-manager-with-vault-cli
 dark-factory-version: v0.54.0
 created: "2026-03-12T22:00:00Z"
 queued: "2026-03-12T22:04:39Z"
 started: "2026-03-12T22:12:49Z"
+completed: "2026-03-12T22:17:13Z"
 ---
 
 <summary>
