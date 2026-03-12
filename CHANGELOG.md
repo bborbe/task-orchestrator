@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.10.0
+- feat: Wire `StaleSessionCleaner` into `lifespan` context manager in `factory.py` as a tracked `asyncio.Task` that runs on startup and is cancelled gracefully on shutdown
+
 ## v0.9.0
 - feat: Add `StaleSessionCleaner` class with `run_once()` and `run_loop()` async methods to detect and clear stale `claude_session_id` values whose `.jsonl` session files no longer exist under `~/.claude/projects/`
 
