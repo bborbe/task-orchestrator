@@ -30,6 +30,7 @@ class Config:
     vaults: list[VaultConfig] = field(default_factory=list)
     host: str = "127.0.0.1"
     port: int = 8000
+    current_user: str = ""
 
     def get_vault(self, name: str) -> VaultConfig | None:
         """Get vault config by name."""
@@ -40,6 +41,19 @@ class Config:
 
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
+
+
+def discover_current_user(vault_cli_path: str) -> str:
+    """Call vault-cli config current-user and return the username."""
+    result = subprocess.run(
+        [vault_cli_path, "config", "current-user"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"vault-cli config current-user failed: {result.stderr.strip()}")
+    return result.stdout.strip()
 
 
 def discover_vaults_from_cli(vault_cli_path: str) -> list[dict[str, str]]:
@@ -72,6 +86,7 @@ def load_config(config_path: Path = _CONFIG_PATH) -> Config:
         data = yaml.safe_load(f)
 
     vault_cli_path = data.get("vault_cli_path", "vault-cli")
+    current_user = discover_current_user(vault_cli_path)
     cli_vaults = discover_vaults_from_cli(vault_cli_path)
 
     # Index cli vaults by lowercase name for case-insensitive lookup
@@ -112,4 +127,5 @@ def load_config(config_path: Path = _CONFIG_PATH) -> Config:
         vaults=vaults,
         host=data.get("host", "127.0.0.1"),
         port=data.get("port", 8000),
+        current_user=current_user,
     )

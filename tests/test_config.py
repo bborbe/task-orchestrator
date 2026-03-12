@@ -1,6 +1,7 @@
 """Tests for config loading."""
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,12 +19,28 @@ def _mock_run(vaults: list[dict] | None = None) -> MagicMock:
     return mock
 
 
+def _make_side_effect(vaults: list[dict] | None = None, current_user: str = "testuser"):
+    """Return a side_effect function that handles both vault-list and current-user calls."""
+    vault_data = vaults if vaults is not None else []
+
+    def side_effect(cmd, **kwargs):
+        if "current-user" in cmd:
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=f"{current_user}\n", stderr=""
+            )
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=0, stdout=json.dumps(vault_data), stderr=""
+        )
+
+    return side_effect
+
+
 def test_load_config_reads_vaults(tmp_path: Path) -> None:
     """load_config parses vaults from YAML config dict format."""
     cli_vaults = [{"name": "personal", "path": "/some/path/Personal", "tasks_dir": "24 Tasks"}]
     config_file = tmp_path / "config.yaml"
     config_file.write_text("vaults:\n  personal:\n    claude_script: claude-personal.sh\n")
-    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert len(config.vaults) == 1
     vault = config.vaults[0]
@@ -42,7 +59,7 @@ def test_load_config_multiple_vaults(tmp_path: Path) -> None:
     ]
     config_file = tmp_path / "config.yaml"
     config_file.write_text("vaults:\n  personal: {}\n  work: {}\n")
-    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert len(config.vaults) == 2
     assert config.vaults[0].name == "personal"
@@ -54,7 +71,7 @@ def test_load_config_defaults(tmp_path: Path) -> None:
     cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
     config_file = tmp_path / "config.yaml"
     config_file.write_text("vaults:\n  personal: {}\n")
-    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert config.host == "127.0.0.1"
     assert config.port == 8000
@@ -65,7 +82,7 @@ def test_load_config_optional_overrides(tmp_path: Path) -> None:
     cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
     config_file = tmp_path / "config.yaml"
     config_file.write_text("vaults:\n  personal: {}\nhost: 0.0.0.0\nport: 9000\n")
-    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert config.host == "0.0.0.0"
     assert config.port == 9000
@@ -77,6 +94,16 @@ def test_load_config_missing_file_raises(tmp_path: Path) -> None:
         load_config(tmp_path / "nonexistent.yaml")
 
 
+def test_load_config_current_user(tmp_path: Path) -> None:
+    """load_config populates current_user from vault-cli."""
+    cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("vaults:\n  personal: {}\n")
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults, current_user="alice")):
+        config = load_config(config_file)
+    assert config.current_user == "alice"
+
+
 def test_get_vault_returns_correct_vault(tmp_path: Path) -> None:
     """Config.get_vault finds vault by name."""
     cli_vaults = [
@@ -85,7 +112,7 @@ def test_get_vault_returns_correct_vault(tmp_path: Path) -> None:
     ]
     config_file = tmp_path / "config.yaml"
     config_file.write_text("vaults:\n  personal: {}\n  work: {}\n")
-    with patch("subprocess.run", return_value=_mock_run(cli_vaults)):
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert config.get_vault("personal") is not None
     assert config.get_vault("personal").vault_path == "/personal"

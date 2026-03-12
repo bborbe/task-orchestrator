@@ -44,9 +44,19 @@ async def cleanup_stale_sessions(config: Config) -> int:
                     )
                     continue
 
-                session_file = project_dir / f"{session_id}.jsonl"
-                if session_file.exists():
-                    continue
+                if task.assignee and task.assignee != config.current_user:
+                    logger.info(
+                        "[Cleanup] Clearing session %s from task %s: "
+                        "assigned to %s, not current user %s",
+                        session_id,
+                        task.id,
+                        task.assignee,
+                        config.current_user,
+                    )
+                else:
+                    session_file = project_dir / f"{session_id}.jsonl"
+                    if session_file.exists():
+                        continue
 
                 try:
                     vault_cli_args = [
