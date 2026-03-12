@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced watchdog TaskWatcher with VaultCLIWatcher subprocess wrapper around vault-cli task watch, removed watchdog dependency and obsidian/ package
+container: task-orchestrator-025-c-replace-file-watcher-with-vault-cli
+dark-factory-version: v0.54.0
 created: "2026-03-12T22:15:00Z"
 queued: "2026-03-12T22:04:39Z"
+started: "2026-03-12T22:27:41Z"
+completed: "2026-03-12T22:30:49Z"
 ---
 
 <summary>
