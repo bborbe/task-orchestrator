@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: ["001"]
+summary: Created StaleSessionCleaner class in src/task_orchestrator/stale_session_cleaner.py with run_once() and run_loop() async methods, helper functions for session file path derivation and existence checking, and vault-cli subprocess invocation following existing patterns
+container: task-orchestrator-017-spec-001-session-cleaner
+dark-factory-version: v0.54.0
 created: "2026-03-12T00:00:00Z"
 queued: "2026-03-12T14:40:37Z"
+started: "2026-03-12T14:43:17Z"
+completed: "2026-03-12T14:44:33Z"
 branch: dark-factory/spec-001
 ---
 <summary>
