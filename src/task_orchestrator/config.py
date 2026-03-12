@@ -1,9 +1,14 @@
 """Configuration for TaskOrchestrator."""
 
+import json
+import logging
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -12,8 +17,8 @@ class VaultConfig:
 
     name: str
     vault_path: str
-    vault_name: str  # For obsidian:// URLs
     tasks_folder: str
+    vault_name: str = ""  # For obsidian:// URLs, defaults to name.title()
     claude_script: str = "claude"  # Script to run Claude sessions (default: "claude")
     vault_cli_path: str = "vault-cli"  # Path to vault-cli binary
 
@@ -23,7 +28,6 @@ class Config:
     """Application configuration."""
 
     vaults: list[VaultConfig] = field(default_factory=list)
-    claude_cli: str = "claude"
     host: str = "127.0.0.1"
     port: int = 8000
 
@@ -36,6 +40,22 @@ class Config:
 
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
+
+
+def discover_vaults_from_cli(vault_cli_path: str) -> list[dict]:
+    """Call vault-cli config list --output json and return parsed vault list."""
+    result = subprocess.run(
+        [vault_cli_path, "config", "list", "--output", "json"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"vault-cli config list failed: {result.stderr.strip()}")
+    vaults = json.loads(result.stdout)
+    if not isinstance(vaults, list):
+        raise RuntimeError("vault-cli config list returned non-list")
+    return vaults
 
 
 def load_config(config_path: Path = _CONFIG_PATH) -> Config:
@@ -51,10 +71,45 @@ def load_config(config_path: Path = _CONFIG_PATH) -> Config:
     with config_path.open() as f:
         data = yaml.safe_load(f)
 
-    vaults = [VaultConfig(**v) for v in data.get("vaults", [])]
+    vault_cli_path = data.get("vault_cli_path", "vault-cli")
+    cli_vaults = discover_vaults_from_cli(vault_cli_path)
+
+    # Index cli vaults by lowercase name for case-insensitive lookup
+    cli_vault_by_name = {v["name"].lower(): v for v in cli_vaults}
+
+    vault_overrides = data.get("vaults", {}) or {}
+
+    vaults = []
+    for vault_key, overrides in vault_overrides.items():
+        overrides = overrides or {}
+        cli_vault = cli_vault_by_name.get(vault_key.lower())
+        if cli_vault is None:
+            logger.warning("Vault '%s' not found in vault-cli output, skipping", vault_key)
+            continue
+
+        vault_name = overrides.get("vault_name") or ""
+        if not vault_name:
+            vault_name = vault_key.title()
+
+        vaults.append(
+            VaultConfig(
+                name=vault_key,
+                vault_path=cli_vault["path"],
+                tasks_folder=cli_vault["tasks_dir"],
+                vault_name=vault_name,
+                claude_script=overrides.get("claude_script", "claude"),
+                vault_cli_path=vault_cli_path,
+            )
+        )
+
+    if not vaults:
+        raise RuntimeError(
+            "No vaults configured after merging with vault-cli output. "
+            "Check config.yaml vaults section and that vault-cli is available."
+        )
+
     return Config(
         vaults=vaults,
-        claude_cli=data.get("claude_cli", "claude"),
         host=data.get("host", "127.0.0.1"),
         port=data.get("port", 8000),
     )
