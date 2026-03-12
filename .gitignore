@@ -20,3 +20,4 @@ wheels/
 /.dark-factory.lock
 /prompts/log
 /specs/log
+/bin/
