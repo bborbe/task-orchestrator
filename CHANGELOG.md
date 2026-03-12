@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.12.1
+- refactor: Inherit `claude_script` from vault-cli registry instead of duplicating it in `config.yaml`; the key is now read from `vault-cli config list` JSON output with `"claude"` as fallback
+
 ## v0.12.0
 - feat: Add assignee-aware stale session cleanup — sessions belonging to other users are always cleared; current user's sessions are only cleared when the `.jsonl` file is missing
 - feat: Add `discover_current_user` to config and populate `Config.current_user` from `vault-cli config current-user` at startup

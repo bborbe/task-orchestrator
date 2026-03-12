@@ -112,7 +112,7 @@ def load_config(config_path: Path = _CONFIG_PATH) -> Config:
                 vault_path=cli_vault["path"],
                 tasks_folder=cli_vault["tasks_dir"],
                 vault_name=vault_name,
-                claude_script=overrides.get("claude_script", "claude"),
+                claude_script=cli_vault.get("claude_script") or "claude",
                 vault_cli_path=vault_cli_path,
             )
         )

@@ -37,9 +37,16 @@ def _make_side_effect(vaults: list[dict] | None = None, current_user: str = "tes
 
 def test_load_config_reads_vaults(tmp_path: Path) -> None:
     """load_config parses vaults from YAML config dict format."""
-    cli_vaults = [{"name": "personal", "path": "/some/path/Personal", "tasks_dir": "24 Tasks"}]
+    cli_vaults = [
+        {
+            "name": "personal",
+            "path": "/some/path/Personal",
+            "tasks_dir": "24 Tasks",
+            "claude_script": "claude-personal.sh",
+        }
+    ]
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("vaults:\n  personal:\n    claude_script: claude-personal.sh\n")
+    config_file.write_text("vaults:\n  personal:\n")
     with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
         config = load_config(config_file)
     assert len(config.vaults) == 1
@@ -49,6 +56,28 @@ def test_load_config_reads_vaults(tmp_path: Path) -> None:
     assert vault.vault_name == "Personal"
     assert vault.tasks_folder == "24 Tasks"
     assert vault.claude_script == "claude-personal.sh"
+
+
+def test_load_config_claude_script_fallback(tmp_path: Path) -> None:
+    """load_config falls back to 'claude' when claude_script is absent from CLI output."""
+    cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("vaults:\n  personal:\n")
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
+        config = load_config(config_file)
+    assert config.vaults[0].claude_script == "claude"
+
+
+def test_load_config_claude_script_empty_string_fallback(tmp_path: Path) -> None:
+    """load_config falls back to 'claude' when claude_script is empty string in CLI output."""
+    cli_vaults = [
+        {"name": "personal", "path": "/personal", "tasks_dir": "Tasks", "claude_script": ""}
+    ]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("vaults:\n  personal:\n")
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
+        config = load_config(config_file)
+    assert config.vaults[0].claude_script == "claude"
 
 
 def test_load_config_multiple_vaults(tmp_path: Path) -> None:
