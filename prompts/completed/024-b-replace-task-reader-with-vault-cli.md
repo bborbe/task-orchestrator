@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced ObsidianTaskReader direct file access with VaultCLIClient async subprocess wrapper for all task list/read/update operations; removed task_reader.py and updated all dependent modules and tests
+container: task-orchestrator-024-b-replace-task-reader-with-vault-cli
+dark-factory-version: v0.54.0
 created: "2026-03-12T22:00:00Z"
 queued: "2026-03-12T22:04:39Z"
+started: "2026-03-12T22:17:16Z"
+completed: "2026-03-12T22:27:37Z"
 ---
 
 <summary>
