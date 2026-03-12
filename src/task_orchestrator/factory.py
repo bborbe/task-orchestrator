@@ -14,7 +14,6 @@ from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
 from task_orchestrator.obsidian.task_watcher import TaskWatcher
-from task_orchestrator.stale_session_cleaner import StaleSessionCleaner
 from task_orchestrator.status_cache import StatusCache
 from task_orchestrator.websocket.connection_manager import ConnectionManager
 
@@ -28,7 +27,6 @@ _connection_manager: ConnectionManager | None = None
 _watchers: dict[str, TaskWatcher] = {}
 _status_cache: StatusCache | None = None
 _cleanup_task: asyncio.Task[None] | None = None
-_stale_session_task: asyncio.Task[None] | None = None
 
 
 def get_config() -> Config:
@@ -146,7 +144,7 @@ def stop_task_watchers() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application lifecycle - startup and shutdown."""
-    global _cleanup_task, _stale_session_task
+    global _cleanup_task
     # Populate status cache before starting watchers
     logger.info("[Lifespan] Loading status cache...")
     cache = get_status_cache()
@@ -161,10 +159,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("[Lifespan] Starting cleanup loop...")
     _cleanup_task = asyncio.create_task(run_cleanup_loop(config))
 
-    cleaner = StaleSessionCleaner(config, get_task_reader_for_vault)
-    _stale_session_task = asyncio.create_task(cleaner.run_loop(), name="stale-session-cleanup")
-    logger.info("Stale session cleanup task started")
-
     try:
         yield
     finally:
@@ -175,11 +169,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             _cleanup_task.cancel()
             with suppress(asyncio.CancelledError):
                 await _cleanup_task
-        if _stale_session_task is not None:
-            _stale_session_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await _stale_session_task
-            logger.info("Stale session cleanup task stopped")
 
 
 def create_app() -> FastAPI:

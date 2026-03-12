@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.10.1
+- refactor: Remove duplicate `stale_session_cleaner.py` module and its wiring from `factory.py`
+- fix: Use exact vault name (no `.lower()`) in `cleanup.py` vault-cli args to support mixed-case vault names like "Family"
+
 ## v0.10.0
 - feat: Wire `StaleSessionCleaner` into `lifespan` context manager in `factory.py` as a tracked `asyncio.Task` that runs on startup and is cancelled gracefully on shutdown
 

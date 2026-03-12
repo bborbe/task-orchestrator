@@ -56,7 +56,7 @@ async def cleanup_stale_sessions(config: Config) -> int:
                         task.id,
                         "claude_session_id",
                         "--vault",
-                        vault.name.lower(),
+                        vault.name,
                     ]
                     proc = await asyncio.create_subprocess_exec(
                         *vault_cli_args,
