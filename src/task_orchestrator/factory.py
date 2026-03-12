@@ -11,10 +11,9 @@ from fastapi.staticfiles import StaticFiles
 
 from task_orchestrator.cleanup import run_cleanup_loop
 from task_orchestrator.config import Config, VaultConfig, load_config
-from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
-from task_orchestrator.obsidian.task_watcher import TaskWatcher
 from task_orchestrator.status_cache import StatusCache
 from task_orchestrator.vault_cli_client import VaultCLIClient
+from task_orchestrator.vault_cli_watcher import VaultCLIWatcher
 from task_orchestrator.websocket.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,8 @@ _config: Config | None = None
 
 # Global connection manager and watchers
 _connection_manager: ConnectionManager | None = None
-_watchers: dict[str, TaskWatcher] = {}
+_watchers: dict[str, VaultCLIWatcher] = {}
+_watcher_tasks: list[asyncio.Task[None]] = []
 _status_cache: StatusCache | None = None
 _cleanup_task: asyncio.Task[None] | None = None
 
@@ -72,13 +72,13 @@ def get_status_cache() -> StatusCache:
 
 
 def start_task_watchers() -> None:
-    """Start file watchers for all discovered hierarchy folders in all vaults."""
-    global _watchers
+    """Start vault-cli watchers for all vaults."""
+    global _watchers, _watcher_tasks
     config = get_config()
     connection_manager = get_connection_manager()
     cache = get_status_cache()
 
-    # Get the running event loop to schedule coroutines from threads
+    # Get the running event loop to schedule coroutines
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -86,59 +86,54 @@ def start_task_watchers() -> None:
         return
 
     for vault in config.vaults:
-        vault_path = Path(vault.vault_path)
-        folders_to_watch = discover_hierarchy_folders_for_vault(vault_path, vault.tasks_folder)
+        try:
+            # Wire callback to invalidate cache AND broadcast
+            def make_callback(vault_name: str) -> Callable[[str, str, str], None]:
+                def callback(event_type: str, item_id: str, vault_arg: str) -> None:
+                    # Invalidate cache
+                    cache.invalidate(vault_arg, item_id)
 
-        if not folders_to_watch:
-            logger.info(f"[Factory] No hierarchy folders found for vault: {vault.name}")
-            continue
+                    # Broadcast to UI clients
+                    message = {"type": event_type, "task_id": item_id, "vault": vault_arg}
+                    asyncio.run_coroutine_threadsafe(connection_manager.broadcast(message), loop)
 
-        for folder_path in folders_to_watch:
-            try:
-                watcher = TaskWatcher(folder_path, vault.name)
+                return callback
 
-                # Wire callback to invalidate cache AND broadcast
-                def make_callback(vault_name: str) -> Callable[[str, str, str], None]:
-                    def callback(event_type: str, item_id: str, vault_arg: str) -> None:
-                        # Invalidate cache
-                        cache.invalidate(vault_arg, item_id)
+            watcher = VaultCLIWatcher(
+                vault_cli_path=vault.vault_cli_path,
+                vault_name=vault.name,
+                on_change=make_callback(vault.name),
+            )
+            _watchers[vault.name] = watcher
 
-                        # Broadcast to UI clients
-                        message = {"type": event_type, "task_id": item_id, "vault": vault_arg}
-                        asyncio.run_coroutine_threadsafe(
-                            connection_manager.broadcast(message), loop
-                        )
+            # Schedule the async start() as a task on the running loop
+            task = loop.create_task(watcher.start())
+            _watcher_tasks.append(task)
+            logger.info(f"[Factory] Started vault-cli watcher for vault: {vault.name}")
 
-                    return callback
-
-                watcher.set_callback(make_callback(vault.name))
-                watcher.start(background=True)
-
-                # Use unique key per folder
-                watcher_key = f"{vault.name}:{folder_path.name}"
-                _watchers[watcher_key] = watcher
-                logger.info(f"[Factory] Watching {folder_path.name} for {vault.name}")
-
-            except Exception as e:
-                logger.error(
-                    "[Factory] Failed to start watcher for %s in %s: %s",
-                    folder_path.name,
-                    vault.name,
-                    e,
-                    exc_info=True,
-                )
+        except Exception as e:
+            logger.error(
+                "[Factory] Failed to start watcher for vault %s: %s",
+                vault.name,
+                e,
+                exc_info=True,
+            )
 
 
 def stop_task_watchers() -> None:
-    """Stop all running file watchers."""
-    global _watchers
+    """Stop all running vault-cli watchers."""
+    global _watchers, _watcher_tasks
     for vault_name, watcher in _watchers.items():
         try:
-            watcher.stop()
+            watcher.terminate()
             logger.info(f"[Factory] Stopped watcher for vault: {vault_name}")
         except Exception as e:
             logger.error(f"[Factory] Failed to stop watcher for {vault_name}: {e}", exc_info=True)
+    # Cancel the asyncio tasks (propagates CancelledError into start() loops)
+    for task in _watcher_tasks:
+        task.cancel()
     _watchers.clear()
+    _watcher_tasks.clear()
 
 
 @asynccontextmanager

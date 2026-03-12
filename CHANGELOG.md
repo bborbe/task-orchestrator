@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.12.4
+- refactor: Replace watchdog-based `TaskWatcher` with `VaultCLIWatcher` subprocess wrapper around `vault-cli task watch`; remove `watchdog` dependency and `obsidian/` package
+
 ## v0.12.3
 - refactor: Replace `ObsidianTaskReader` direct file access with `VaultCLIClient` async subprocess wrapper for all task list/read/update operations; remove `task_reader.py`
 

@@ -15,7 +15,6 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "pyyaml>=6.0.0",
-    "watchdog>=5.0.0",
 ]
 
 [project.optional-dependencies]
