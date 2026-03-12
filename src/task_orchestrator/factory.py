@@ -3,12 +3,13 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from task_orchestrator.cleanup import run_cleanup_loop
 from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.hierarchy import discover_hierarchy_folders_for_vault
 from task_orchestrator.obsidian.task_reader import ObsidianTaskReader, TaskReader
@@ -25,6 +26,7 @@ _config: Config | None = None
 _connection_manager: ConnectionManager | None = None
 _watchers: dict[str, TaskWatcher] = {}
 _status_cache: StatusCache | None = None
+_cleanup_task: asyncio.Task[None] | None = None
 
 
 def get_config() -> Config:
@@ -142,6 +144,7 @@ def stop_task_watchers() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application lifecycle - startup and shutdown."""
+    global _cleanup_task
     # Populate status cache before starting watchers
     logger.info("[Lifespan] Loading status cache...")
     cache = get_status_cache()
@@ -152,11 +155,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     logger.info("[Lifespan] Starting task watchers...")
     start_task_watchers()
+
+    logger.info("[Lifespan] Starting cleanup loop...")
+    _cleanup_task = asyncio.create_task(run_cleanup_loop(config))
+
     try:
         yield
     finally:
         logger.info("[Lifespan] Stopping task watchers...")
         stop_task_watchers()
+        if _cleanup_task is not None:
+            logger.info("[Lifespan] Stopping cleanup loop...")
+            _cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await _cleanup_task
 
 
 def create_app() -> FastAPI:

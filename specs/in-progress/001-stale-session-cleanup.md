@@ -1,9 +1,10 @@
 ---
-status: approved
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-03-12T12:42:04Z"
+prompted: "2026-03-12T14:40:37Z"
 branch: dark-factory/spec-001
 ---
 

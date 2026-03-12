@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.8.0
+- feat: Add background cleanup loop that detects and clears stale `claude_session_id` values from task frontmatter when the corresponding Claude session `.jsonl` file no longer exists
+
 ## v0.7.12
 - chore: Migrate from deprecated `claude-code-sdk` to `claude-agent-sdk`, rename `ClaudeCodeOptions` to `ClaudeAgentOptions`, replace direct `__aenter__`/`__aexit__` calls with `AsyncExitStack` in `Session` and `SessionManager`, and update model alias `"sonnet"` to explicit `"claude-sonnet-4-5"`
 
