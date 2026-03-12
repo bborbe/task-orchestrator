@@ -5,7 +5,6 @@
 import asyncio
 import json
 import logging
-import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -24,30 +23,46 @@ from task_orchestrator.factory import (
 )
 
 if TYPE_CHECKING:
-    from task_orchestrator.claude.session_manager import SessionManager
     from task_orchestrator.websocket.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Global session manager (initialized in main)
-_session_manager: "SessionManager | None" = None
-
 # Global connection manager (injected via set_connection_manager)
 _connection_manager: "ConnectionManager | None" = None
-
-
-def set_session_manager(manager: "SessionManager") -> None:
-    """Set global session manager."""
-    global _session_manager
-    _session_manager = manager
 
 
 def set_connection_manager(manager: "ConnectionManager") -> None:
     """Set global connection manager."""
     global _connection_manager
     _connection_manager = manager
+
+
+async def start_vault_cli_session(vault_config: VaultConfig, task_id: str) -> str:
+    """Start a Claude session via vault-cli, returns session_id."""
+    proc = await asyncio.create_subprocess_exec(
+        vault_config.vault_cli_path,
+        "task",
+        "work-on",
+        task_id,
+        "--mode",
+        "headless",
+        "--vault",
+        vault_config.name,
+        "--output",
+        "json",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"vault-cli work-on failed: {stderr.decode().strip()}")
+    result: dict[str, str] = json.loads(stdout.decode())
+    session_id = result.get("session_id", "")
+    if not session_id:
+        raise RuntimeError("vault-cli work-on returned no session_id")
+    return session_id
 
 
 class VaultResponse(BaseModel):
@@ -222,10 +237,6 @@ async def run_task(
     """
     logger.info(f"run_task called: vault={vault}, task_id={task_id}")
 
-    if not _session_manager:
-        logger.error("Session manager not initialized!")
-        raise HTTPException(status_code=500, detail="Session manager not initialized")
-
     try:
         reader = get_task_reader_for_vault(vault)
         vault_config = get_vault_config(vault)
@@ -233,17 +244,8 @@ async def run_task(
         # Read task
         task = reader.read_task(task_id)
 
-        # Build relative task file path (relative to vault)
-        task_file_path = f"{vault_config.tasks_folder}/{task.id}.md"
-
-        # Send /work-on-task prompt and get session_id from Claude
-        # Set cwd to vault path so relative paths work
-        prompt = f'/work-on-task "{task_file_path}"'
-        logger.info(f"Creating session for task {task_id}, cwd: {vault_config.vault_path}")
-
-        session_id = await _session_manager.start_session(
-            prompt, cwd=vault_config.vault_path, task_id=task_id, task_reader=reader
-        )
+        logger.info(f"Starting vault-cli session for task {task_id}")
+        session_id = await start_vault_cli_session(vault_config, task_id)
         logger.info(f"Session {session_id} created")
 
         # Build command: use vault-specific script from config (handles cd internally)
@@ -348,62 +350,9 @@ async def execute_slash_command(
         if request.command not in ("work-on-task", "create-task"):
             raise HTTPException(status_code=400, detail=f"Unknown command: {request.command}")
 
-        if not _session_manager:
-            raise HTTPException(status_code=500, detail="Session manager not initialized")
-
-        # Build task file path
-        task_file_path = f"{vault_config.tasks_folder}/{task.id}.md"
-
-        # Check if task has existing session
-        existing_session_id = task.claude_session_id
-
-        # Send slash command with --tool flag for machine-readable output
-        # Commands with --tool return {"success": true/false, ...}
-        if request.command == "create-task":
-            prompt = f'/create-task "{task_file_path}" --tool'
-        else:  # work-on-task
-            prompt = f'/work-on-task "{task_file_path}"'
-
-        if existing_session_id:
-            logger.info(f"Resuming existing session: {existing_session_id} with command: {prompt}")
-        else:
-            logger.info(f"Creating new session with command: {prompt}")
-
-        # Send prompt to Claude
-        session_id, response = await _session_manager.send_prompt(
-            prompt, cwd=vault_config.vault_path
-        )
-
-        # Parse response for success/failure
-        success = None
-        error_message = None
-
-        # Try to extract JSON from response
-        json_match = re.search(r'\{[^}]*"success"[^}]*\}', response)
-        if json_match:
-            try:
-                result = json.loads(json_match.group())
-                success = result.get("success", None)
-                error_message = result.get("error", None)
-                logger.info(f"Parsed result: success={success}, error={error_message}")
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse JSON from response: {json_match.group()}")
-
-        # Set phase to human_review if command failed
-        if success is False:
-            try:
-                reader.update_task_phase(task_id, "human_review")
-                logger.info(f"Set phase to human_review for task {task_id} due to command failure")
-            except Exception as phase_error:
-                logger.error(f"Failed to set phase to human_review: {phase_error}")
-
-        # Save session_id if new
-        if not existing_session_id:
-            try:
-                await asyncio.to_thread(reader.update_task_session_id, task_id, session_id)
-                logger.info(f"Saved new session_id: {session_id}")
-            except Exception as save_error:
-                logger.error(f"Failed to save session_id: {save_error}")
+        logger.info(f"Starting vault-cli session for {request.command} on task {task_id}")
+        session_id = await start_vault_cli_session(vault_config, task_id)
+        logger.info(f"Session {session_id} created via vault-cli")
 
         # Build resume command
         command = f"{vault_config.claude_script} --resume {session_id}"
@@ -413,9 +362,6 @@ async def execute_slash_command(
             command=command,
             working_dir=vault_config.vault_path,
             task_title=task.title,
-            executed_command=prompt,
-            success=success,
-            error=error_message,
         )
 
     except HTTPException:

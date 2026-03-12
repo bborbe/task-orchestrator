@@ -14,8 +14,6 @@ def test_client(
     tmp_vault: Path, sample_task_file: Path, monkeypatch: pytest.MonkeyPatch
 ) -> TestClient:
     """Create test client with mocked config."""
-    from unittest.mock import AsyncMock, MagicMock
-
     from task_orchestrator.config import VaultConfig
 
     # Create test config with test vault
@@ -34,14 +32,6 @@ def test_client(
 
     # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
-
-    # Mock session manager and client factory
-    mock_session_manager = MagicMock()
-    mock_session_manager.create_session = AsyncMock()
-    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
-
-    # Inject mocks into tasks module
-    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     # Create app
     app = create_app()
@@ -79,7 +69,14 @@ def test_run_task_endpoint_success(
     test_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Test POST /api/tasks/{id}/run endpoint success."""
-    response = test_client.post("/api/tasks/Test%20Task/run?vault=TestVault")
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b'{"session_id": "test-session-id"}', b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+        response = test_client.post("/api/tasks/Test%20Task/run?vault=TestVault")
 
     assert response.status_code == 200
     data = response.json()
@@ -102,6 +99,8 @@ def test_run_task_endpoint_not_found(test_client: TestClient) -> None:
 
 def test_run_task_endpoint_no_project(test_client: TestClient, tmp_vault: Path) -> None:
     """Test POST /api/tasks/{id}/run with task missing project field - should still work."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
     # Create task without project field
     tasks_dir = tmp_vault / "24 Tasks"
     task_file = tasks_dir / "No Project Task.md"
@@ -115,7 +114,12 @@ Task without project.
 
     task_file.write_text(content)
 
-    response = test_client.post("/api/tasks/No%20Project%20Task/run?vault=TestVault")
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b'{"session_id": "test-session-id"}', b""))
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+        response = test_client.post("/api/tasks/No%20Project%20Task/run?vault=TestVault")
 
     # Should succeed even without project field
     assert response.status_code == 200
@@ -212,8 +216,6 @@ def test_list_tasks_no_vault_returns_all_vaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Test GET /api/tasks with no vault parameter returns tasks from all vaults."""
-    from unittest.mock import AsyncMock, MagicMock
-
     from task_orchestrator.config import VaultConfig
 
     # Create two test vaults
@@ -263,11 +265,6 @@ Task in vault 2
 
     # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
-
-    # Mock session manager
-    mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
-    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     # Create app
     app = create_app()
@@ -288,8 +285,6 @@ Task in vault 2
 
 def test_list_tasks_single_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test GET /api/tasks with single vault parameter."""
-    from unittest.mock import AsyncMock, MagicMock
-
     from task_orchestrator.config import VaultConfig
 
     # Create two test vaults
@@ -340,11 +335,6 @@ Task in vault 2
     # Override factory config
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
 
-    # Mock session manager
-    mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
-    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
-
     # Create app
     app = create_app()
     client = TestClient(app)
@@ -363,8 +353,6 @@ Task in vault 2
 
 def test_list_tasks_multiple_vaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test GET /api/tasks with multiple vault parameters."""
-    from unittest.mock import AsyncMock, MagicMock
-
     from task_orchestrator.config import VaultConfig
 
     # Create three test vaults
@@ -429,10 +417,6 @@ Task in vault 3
     )
 
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
-
-    mock_session_manager = MagicMock()
-    mock_session_manager.start_session = AsyncMock(return_value="test-session-id")
-    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     app = create_app()
     client = TestClient(app)
@@ -694,13 +678,6 @@ def test_execute_vault_cli_uses_configured_path(
     )
 
     monkeypatch.setattr("task_orchestrator.factory._config", test_config)
-
-    from unittest.mock import AsyncMock as AM
-    from unittest.mock import MagicMock as MM
-
-    mock_session_manager = MM()
-    mock_session_manager.start_session = AM(return_value="sess-id")
-    monkeypatch.setattr("task_orchestrator.api.tasks._session_manager", mock_session_manager)
 
     from fastapi.testclient import TestClient as TC
 

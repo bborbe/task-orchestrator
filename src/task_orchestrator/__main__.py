@@ -6,9 +6,7 @@ import sys
 import uvicorn
 
 from task_orchestrator.api.tasks import set_connection_manager as tasks_set_connection_manager
-from task_orchestrator.api.tasks import set_session_manager
 from task_orchestrator.api.websocket import set_connection_manager
-from task_orchestrator.claude.session_manager import SessionManager
 from task_orchestrator.factory import (
     create_app,
     get_config,
@@ -29,11 +27,6 @@ def main() -> int:
     )
 
     try:
-        session_manager = SessionManager()
-
-        # Inject session manager into API routes
-        set_session_manager(session_manager)
-
         # Inject connection manager into WebSocket routes
         set_connection_manager(get_connection_manager())
 

@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.12.2
+- refactor: Replace `claude-agent-sdk` session management with `vault-cli task work-on --mode headless` subprocess calls; remove `SessionManager`, `claude/` package, and `claude-agent-sdk` dependency
+
 ## v0.12.1
 - refactor: Inherit `claude_script` from vault-cli registry instead of duplicating it in `config.yaml`; the key is now read from `vault-cli config list` JSON output with `"claude"` as fallback
 

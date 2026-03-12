@@ -9,7 +9,6 @@ authors = [
     { name="Benjamin Borbe", email="benjamin.borbe@gmail.com" }
 ]
 dependencies = [
-    "claude-agent-sdk>=0.1.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
     "websockets>=14.0",
