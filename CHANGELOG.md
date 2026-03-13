@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.12.5
+- fix: Map vault-cli `name` field to task `id` and `title` in VaultCLIClient parser
+
 ## v0.12.4
 - refactor: Replace watchdog-based `TaskWatcher` with `VaultCLIWatcher` subprocess wrapper around `vault-cli task watch`; remove `watchdog` dependency and `obsidian/` package
 

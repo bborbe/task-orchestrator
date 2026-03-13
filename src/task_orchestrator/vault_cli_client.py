@@ -149,7 +149,7 @@ class VaultCLIClient:
         elif blocked_by is not None:
             blocked_by = None
 
-        task_id = str(data.get("id", ""))
+        task_id = str(data.get("name", data.get("id", "")))
         return Task(
             id=task_id,
             title=str(data.get("title", task_id)),
