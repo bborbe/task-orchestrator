@@ -259,11 +259,13 @@ async function loadTasks() {
             }
         });
 
-        // Sort tasks by priority (high=1, medium=2, low=3, null=999)
+        // Sort tasks by urgency tier first (0=overdue, 1=due-today, 2=scheduled, 3=none),
+        // then by priority within each tier (high=1, medium=2, low=3, null=999)
         tasks.sort((a, b) => {
-            const priorityA = normalizePriority(a.priority);
-            const priorityB = normalizePriority(b.priority);
-            return priorityA - priorityB;
+            const urgencyA = getUrgencyTier(a);
+            const urgencyB = getUrgencyTier(b);
+            if (urgencyA !== urgencyB) return urgencyA - urgencyB;
+            return normalizePriority(a.priority) - normalizePriority(b.priority);
         });
 
         // Populate cards by phase
@@ -316,6 +318,13 @@ function createTaskCard(task) {
     card.className = 'task-card';
     card.draggable = true;
     card.dataset.taskId = task.id;
+
+    // Apply urgency border class
+    const tier = getUrgencyTier(task);
+    if (tier === 0) card.classList.add('urgency-overdue');
+    else if (tier === 1) card.classList.add('urgency-today');
+    else if (tier === 2) card.classList.add('urgency-scheduled');
+    // tier === 3: no class, default appearance
 
     // Drag handlers
     card.addEventListener('dragstart', (e) => {
@@ -619,6 +628,28 @@ function normalizePriority(priority) {
     }
 
     return 999; // Fallback
+}
+
+/**
+ * Returns the urgency tier for a task based on due_date and planned_date.
+ * Tier values (lower = more urgent):
+ *   0 = overdue (due_date before today, red)
+ *   1 = due today (due_date equals today, yellow)
+ *   2 = scheduled (planned_date <= today, but not overdue/due-today, blue)
+ *   3 = no urgency (no applicable dates)
+ */
+function getUrgencyTier(task) {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    const dueDate = task.due_date && /^\d{4}-\d{2}-\d{2}$/.test(task.due_date)
+        ? task.due_date : null;
+    const plannedDate = task.planned_date && /^\d{4}-\d{2}-\d{2}$/.test(task.planned_date)
+        ? task.planned_date : null;
+
+    if (dueDate && dueDate < today) return 0;   // overdue
+    if (dueDate && dueDate === today) return 1;  // due today
+    if (plannedDate && plannedDate <= today) return 2; // scheduled/actionable
+    return 3; // no urgency
 }
 
 function formatPhase(phase) {

@@ -560,3 +560,16 @@ h1 {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Urgency left-border indicators */
+.task-card.urgency-overdue {
+    border-left: 4px solid #f87171; /* red-400 — overdue */
+}
+
+.task-card.urgency-today {
+    border-left: 4px solid #fbbf24; /* amber-400 — due today */
+}
+
+.task-card.urgency-scheduled {
+    border-left: 4px solid #60a5fa; /* blue-400 — planned/scheduled */
+}

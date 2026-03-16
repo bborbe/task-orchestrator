@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.13.0
+- feat: Add date-urgency colored left-border indicators on Kanban task cards (red=overdue, amber=due today, blue=scheduled) with urgency-first sort within each column
+
 ## v0.12.6
 - fix: Show loading spinner modal during session creation in Start button flow
 - fix: Keep Start button in "Starting..." state across card re-renders
