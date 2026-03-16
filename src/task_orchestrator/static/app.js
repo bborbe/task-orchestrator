@@ -4,6 +4,7 @@ let currentVault = null; // null = "All", or vault name
 let currentAssignee = null;
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
+let startingTasks = new Set(); // Track tasks currently being started
 
 const POLL_INTERVAL_MS = 60000; // Fallback polling every 60 seconds
 
@@ -330,11 +331,24 @@ function createTaskCard(task) {
     // Extract Jira issue info
     const { title, issueKey, issueUrl } = extractJiraIssue(task.title);
 
-    // Show Resume button if session exists, otherwise Start
+    // Show Resume button if session exists, Starting if in progress, otherwise Start
+    const isStarting = startingTasks.has(task.id);
     const hasSession = task.claude_session_id;
-    const buttonLabel = hasSession ? '▶ Resume' : '▶ Start';
-    const buttonClass = hasSession ? 'resume-btn' : 'start-btn';
-    const startButton = `<button class="${buttonClass}" onclick="runTask('${task.id}')">${buttonLabel}</button>`;
+    let buttonLabel, buttonClass, buttonDisabled;
+    if (isStarting) {
+        buttonLabel = '⏳ Starting...';
+        buttonClass = 'start-btn';
+        buttonDisabled = true;
+    } else if (hasSession) {
+        buttonLabel = '▶ Resume';
+        buttonClass = 'resume-btn';
+        buttonDisabled = false;
+    } else {
+        buttonLabel = '▶ Start';
+        buttonClass = 'start-btn';
+        buttonDisabled = false;
+    }
+    const startButton = `<button class="${buttonClass}" onclick="runTask('${task.id}')" ${buttonDisabled ? 'disabled' : ''}>${buttonLabel}</button>`;
 
     const menuButton = '<button class="menu-btn" onclick="showTaskMenu(event, \'' + task.id + '\')">⋮</button>';
 
@@ -412,7 +426,22 @@ async function runTask(taskId) {
             return;
         }
 
+        // Show loading modal during session creation
+        const loadingModal = document.getElementById('loading-modal');
+        loadingModal.classList.remove('hidden');
+
+        // Setup close button handler
+        let userDismissed = false;
+        const closeBtn = document.getElementById('close-loading-btn');
+        const closeHandler = () => {
+            userDismissed = true;
+            loadingModal.classList.add('hidden');
+            closeBtn.removeEventListener('click', closeHandler);
+        };
+        closeBtn.addEventListener('click', closeHandler);
+
         // Create new Claude session
+        startingTasks.add(taskId);
         button.textContent = '⏳ Starting...';
         const response = await fetch(`/api/tasks/${taskId}/run?vault=${encodeURIComponent(task.vault)}`, {
             method: 'POST'
@@ -425,11 +454,20 @@ async function runTask(taskId) {
 
         const data = await response.json();
 
+        // Cleanup
+        closeBtn.removeEventListener('click', closeHandler);
+        loadingModal.classList.add('hidden');
+
+        // Done starting
+        startingTasks.delete(taskId);
+
         // Update task cache with new session_id
         task.claude_session_id = data.session_id;
 
-        // Show session modal with command
-        showModal(data.session_id, data.command, data.working_dir, data.task_title);
+        // Show session modal with command (unless user dismissed loading)
+        if (!userDismissed) {
+            showModal(data.session_id, data.command, data.working_dir, data.task_title);
+        }
 
         // Restore button and update to Resume
         button.textContent = '▶ Resume';
@@ -438,6 +476,12 @@ async function runTask(taskId) {
 
     } catch (error) {
         console.error('Failed to run task:', error);
+
+        // Clear starting state and hide loading modal on error
+        startingTasks.delete(taskId);
+        const loadingModal = document.getElementById('loading-modal');
+        loadingModal.classList.add('hidden');
+
         alert(`Failed to start session: ${error.message}`);
 
         // Restore button

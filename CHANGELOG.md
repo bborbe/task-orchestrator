@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.12.6
+- fix: Show loading spinner modal during session creation in Start button flow
+- fix: Keep Start button in "Starting..." state across card re-renders
+
 ## v0.12.5
 - fix: Map vault-cli `name` field to task `id` and `title` in VaultCLIClient parser
 
