@@ -10,7 +10,7 @@ from task_orchestrator.config import Config, VaultConfig
 
 
 def _make_task(
-    session_id: str = "abc123",
+    session_id: str = "12345678-1234-1234-1234-123456789abc",
     assignee: str | None = None,
     task_id: str = "task-1",
 ) -> Task:
@@ -115,5 +115,25 @@ async def test_no_assignee_session_file_exists_not_cleared() -> None:
     """Task with no assignee and existing session file is NOT cleared."""
     config = _make_config(current_user="alice")
     tasks = [_make_task(assignee=None)]
+    cleared = await _run_cleanup(config, tasks, session_file_exists=True)
+    assert cleared == 0
+
+
+@pytest.mark.asyncio
+async def test_display_name_session_id_always_cleared() -> None:
+    """A non-UUID session ID (display name) is cleared regardless of file existence."""
+    config = _make_config(current_user="alice")
+    tasks = [_make_task(session_id="trading-alerts", assignee="alice")]
+    # session_file_exists=True: even if a file happened to exist with that name,
+    # display names are always cleared without checking file existence
+    cleared = await _run_cleanup(config, tasks, session_file_exists=True)
+    assert cleared == 1
+
+
+@pytest.mark.asyncio
+async def test_uuid_session_id_not_cleared_when_file_exists() -> None:
+    """A UUID session ID with existing session file is NOT cleared (UUID path, unchanged)."""
+    config = _make_config(current_user="alice")
+    tasks = [_make_task(session_id="12345678-1234-1234-1234-123456789abc", assignee="alice")]
     cleared = await _run_cleanup(config, tasks, session_file_exists=True)
     assert cleared == 0

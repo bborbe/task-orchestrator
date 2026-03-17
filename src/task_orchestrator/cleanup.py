@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from task_orchestrator.config import Config
+from task_orchestrator.session_resolver import is_uuid
 from task_orchestrator.vault_cli_client import VaultCLIClient
 
 logger = logging.getLogger(__name__)
@@ -44,19 +45,28 @@ async def cleanup_stale_sessions(config: Config) -> int:
                     )
                     continue
 
-                if task.assignee and task.assignee != config.current_user:
+                if not is_uuid(session_id):
                     logger.info(
-                        "[Cleanup] Clearing session %s from task %s: "
-                        "assigned to %s, not current user %s",
+                        "[Cleanup] Clearing unresolved display-name session '%s'"
+                        " from task %s in vault %s",
                         session_id,
                         task.id,
-                        task.assignee,
-                        config.current_user,
+                        vault.name,
                     )
                 else:
-                    session_file = project_dir / f"{session_id}.jsonl"
-                    if session_file.exists():
-                        continue
+                    if task.assignee and task.assignee != config.current_user:
+                        logger.info(
+                            "[Cleanup] Clearing session %s from task %s: "
+                            "assigned to %s, not current user %s",
+                            session_id,
+                            task.id,
+                            task.assignee,
+                            config.current_user,
+                        )
+                    else:
+                        session_file = project_dir / f"{session_id}.jsonl"
+                        if session_file.exists():
+                            continue
 
                 try:
                     vault_cli_args = [

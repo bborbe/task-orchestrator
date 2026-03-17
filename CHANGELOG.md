@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.14.1
+- fix: Clear non-UUID (display-name) `claude_session_id` values immediately in cleanup loop without checking file existence
+
 ## v0.14.0
 - feat: Add `session_resolver` module with `is_uuid()` and `resolve_session_id()` for resolving Claude session display names to UUIDs by scanning `.jsonl` files in the project directory
 
