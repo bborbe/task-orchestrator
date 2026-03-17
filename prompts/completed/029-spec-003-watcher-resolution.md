@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: ["003"]
+summary: Added PATCH /tasks/{task_id}/session endpoint with eager UUID resolution and wired session resolution into the vault-cli watcher callback
+container: task-orchestrator-029-spec-003-watcher-resolution
+dark-factory-version: v0.57.5
 created: "2026-03-17T00:00:00Z"
 queued: "2026-03-17T13:10:15Z"
+started: "2026-03-17T13:13:14Z"
+completed: "2026-03-17T13:15:12Z"
 ---
 
 <summary>
