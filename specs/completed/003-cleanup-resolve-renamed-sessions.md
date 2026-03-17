@@ -1,10 +1,11 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-03-17T12:58:41Z"
 verifying: "2026-03-17T13:15:12Z"
+completed: "2026-03-17T14:08:50Z"
 branch: dark-factory/cleanup-resolve-renamed-sessions
 ---
 

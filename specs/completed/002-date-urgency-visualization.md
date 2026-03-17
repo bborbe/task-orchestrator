@@ -1,11 +1,12 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-03-16T13:46:08Z"
 prompted: "2026-03-16T13:47:51Z"
 verifying: "2026-03-16T13:51:55Z"
+completed: "2026-03-17T14:08:43Z"
 branch: dark-factory/date-urgency-visualization
 ---
 
