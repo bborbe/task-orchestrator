@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from task_orchestrator.cleanup import run_cleanup_loop
+from task_orchestrator.cleanup import derive_claude_project_dir, run_cleanup_loop
 from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.status_cache import StatusCache
 from task_orchestrator.vault_cli_client import VaultCLIClient
@@ -71,6 +71,44 @@ def get_status_cache() -> StatusCache:
     return _status_cache
 
 
+async def _try_resolve_task_session(
+    vault_cli_path: str,
+    vault_name: str,
+    task_id: str,
+    project_dir: Path,
+) -> None:
+    """Read a task and resolve its claude_session_id if it is a display name.
+
+    Called from the watcher callback after a file change event.
+    Silently no-ops if the task has no session ID or it is already a UUID.
+    """
+    from task_orchestrator.session_resolver import is_uuid, resolve_session_id
+
+    try:
+        client = VaultCLIClient(vault_cli_path, vault_name)
+        task = await client.show_task(task_id)
+        session_id = task.claude_session_id
+        if not session_id or is_uuid(session_id):
+            return
+        resolved = resolve_session_id(session_id, project_dir)
+        if resolved is None:
+            logger.debug(
+                "[Factory] No resolution found for display name '%s' on task %s",
+                session_id,
+                task_id,
+            )
+            return
+        await client.set_field(task_id, "claude_session_id", resolved)
+        logger.info(
+            "[Factory] Watcher: resolved session '%s' -> '%s' for task %s",
+            session_id,
+            resolved,
+            task_id,
+        )
+    except Exception as e:
+        logger.debug("[Factory] Could not resolve session for task %s: %s", task_id, e)
+
+
 def start_task_watchers() -> None:
     """Start vault-cli watchers for all vaults."""
     global _watchers, _watcher_tasks
@@ -88,7 +126,9 @@ def start_task_watchers() -> None:
     for vault in config.vaults:
         try:
             # Wire callback to invalidate cache AND broadcast
-            def make_callback(vault_name: str) -> Callable[[str, str, str], None]:
+            def make_callback(vault_cfg: VaultConfig) -> Callable[[str, str, str], None]:
+                project_dir = derive_claude_project_dir(vault_cfg.vault_path)
+
                 def callback(event_type: str, item_id: str, vault_arg: str) -> None:
                     # Invalidate cache
                     cache.invalidate(vault_arg, item_id)
@@ -97,12 +137,21 @@ def start_task_watchers() -> None:
                     message = {"type": event_type, "task_id": item_id, "vault": vault_arg}
                     asyncio.run_coroutine_threadsafe(connection_manager.broadcast(message), loop)
 
+                    # Schedule session resolution for changed task
+                    # (no-op if session is UUID or absent)
+                    asyncio.run_coroutine_threadsafe(
+                        _try_resolve_task_session(
+                            vault_cfg.vault_cli_path, vault_cfg.name, item_id, project_dir
+                        ),
+                        loop,
+                    )
+
                 return callback
 
             watcher = VaultCLIWatcher(
                 vault_cli_path=vault.vault_cli_path,
                 vault_name=vault.name,
-                on_change=make_callback(vault.name),
+                on_change=make_callback(vault),
             )
             _watchers[vault.name] = watcher
 

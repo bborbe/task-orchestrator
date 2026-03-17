@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from task_orchestrator.api.models import SessionResponse, Task, TaskResponse
+from task_orchestrator.cleanup import derive_claude_project_dir
 from task_orchestrator.config import VaultConfig
 from task_orchestrator.factory import (
     get_config,
@@ -21,6 +22,7 @@ from task_orchestrator.factory import (
     get_vault_cli_client_for_vault,
     get_vault_config,
 )
+from task_orchestrator.session_resolver import is_uuid, resolve_session_id
 
 if TYPE_CHECKING:
     from task_orchestrator.websocket.connection_manager import ConnectionManager
@@ -78,6 +80,12 @@ class UpdatePhaseRequest(BaseModel):
     """Request model for updating task phase."""
 
     phase: str
+
+
+class UpdateSessionRequest(BaseModel):
+    """Request model for setting task claude_session_id."""
+
+    claude_session_id: str
 
 
 class ExecuteCommandRequest(BaseModel):
@@ -448,6 +456,48 @@ async def clear_task_session(
         return {"status": "success", "task_id": task_id}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.patch("/tasks/{task_id}/session")
+async def set_task_session(
+    vault: str,
+    task_id: str,
+    request: UpdateSessionRequest,
+) -> dict[str, str]:
+    """Set claude_session_id on a task, resolving display names to UUIDs eagerly.
+
+    If the supplied value is not a UUID, scans .jsonl files for a matching
+    custom-title entry and stores the resolved UUID instead. If no match is
+    found, the display name is stored as-is.
+
+    Returns:
+        {"status": "success", "task_id": task_id, "claude_session_id": <stored_value>}
+        where claude_session_id is the resolved UUID if resolution succeeded,
+        or the original display name if not.
+    """
+    try:
+        vault_config = get_vault_config(vault)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    try:
+        client = get_vault_cli_client_for_vault(vault)
+
+        if is_uuid(request.claude_session_id):
+            stored_value = request.claude_session_id
+        else:
+            resolved = resolve_session_id(
+                request.claude_session_id,
+                derive_claude_project_dir(vault_config.vault_path),
+            )
+            stored_value = resolved if resolved is not None else request.claude_session_id
+
+        await client.set_field(task_id, "claude_session_id", stored_value)
+        return {"status": "success", "task_id": task_id, "claude_session_id": stored_value}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 

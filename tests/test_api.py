@@ -717,6 +717,91 @@ def test_update_task_phase_vault_cli_failure_returns_500(
     assert "phase update failed" in response.json()["detail"]
 
 
+def test_patch_session_uuid_stored_as_is(
+    test_client: TestClient,
+    mock_vault_client: MagicMock,
+) -> None:
+    """Test PATCH /tasks/{id}/session with a UUID value stores it unchanged."""
+    uuid_value = "12345678-1234-1234-1234-123456789abc"
+
+    with patch("task_orchestrator.api.tasks.is_uuid", return_value=True):
+        response = test_client.patch(
+            "/api/tasks/Test%20Task/session?vault=TestVault",
+            json={"claude_session_id": uuid_value},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {"status": "success", "task_id": "Test Task", "claude_session_id": uuid_value}
+    mock_vault_client.set_field.assert_awaited_once_with(
+        "Test Task", "claude_session_id", uuid_value
+    )
+
+
+def test_patch_session_display_name_resolved(
+    test_client: TestClient,
+    mock_vault_client: MagicMock,
+) -> None:
+    """Test PATCH /tasks/{id}/session with display name that resolves to a UUID."""
+    with (
+        patch("task_orchestrator.api.tasks.is_uuid", return_value=False),
+        patch("task_orchestrator.api.tasks.resolve_session_id", return_value="abc-uuid-123"),
+    ):
+        response = test_client.patch(
+            "/api/tasks/Test%20Task/session?vault=TestVault",
+            json={"claude_session_id": "trading-alerts"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {
+        "status": "success",
+        "task_id": "Test Task",
+        "claude_session_id": "abc-uuid-123",
+    }
+    mock_vault_client.set_field.assert_awaited_once_with(
+        "Test Task", "claude_session_id", "abc-uuid-123"
+    )
+
+
+def test_patch_session_display_name_no_match(
+    test_client: TestClient,
+    mock_vault_client: MagicMock,
+) -> None:
+    """Test PATCH /tasks/{id}/session with display name that does not resolve."""
+    with (
+        patch("task_orchestrator.api.tasks.is_uuid", return_value=False),
+        patch("task_orchestrator.api.tasks.resolve_session_id", return_value=None),
+    ):
+        response = test_client.patch(
+            "/api/tasks/Test%20Task/session?vault=TestVault",
+            json={"claude_session_id": "unknown-session"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {
+        "status": "success",
+        "task_id": "Test Task",
+        "claude_session_id": "unknown-session",
+    }
+    mock_vault_client.set_field.assert_awaited_once_with(
+        "Test Task", "claude_session_id", "unknown-session"
+    )
+
+
+def test_patch_session_vault_not_found(
+    test_client: TestClient,
+) -> None:
+    """Test PATCH /tasks/{id}/session with unknown vault returns 404."""
+    response = test_client.patch(
+        "/api/tasks/Test%20Task/session?vault=NonExistentVault",
+        json={"claude_session_id": "some-session"},
+    )
+
+    assert response.status_code in (404, 422)
+
+
 def test_list_tasks_warns_on_status_phase_mismatch(
     test_client: TestClient, mock_vault_client: MagicMock
 ) -> None:

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.15.0
+- feat: Add `PATCH /tasks/{task_id}/session` endpoint that stores a `claude_session_id`, resolving display names to UUIDs via `session_resolver` before persisting
+- feat: Wire eager session ID resolution into vault-cli watcher callback so display-name session IDs are resolved to UUIDs after each file change event
+
 ## v0.14.1
 - fix: Clear non-UUID (display-name) `claude_session_id` values immediately in cleanup loop without checking file existence
 
