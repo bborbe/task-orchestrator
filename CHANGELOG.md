@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.14.0
+- feat: Add `session_resolver` module with `is_uuid()` and `resolve_session_id()` for resolving Claude session display names to UUIDs by scanning `.jsonl` files in the project directory
+
 ## v0.13.0
 - feat: Add date-urgency colored left-border indicators on Kanban task cards (red=overdue, amber=due today, blue=scheduled) with urgency-first sort within each column
 
