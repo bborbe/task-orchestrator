@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: ["003"]
+summary: Updated cleanup.py to clear non-UUID display-name session IDs immediately, added is_uuid import, updated test default session_id to a real UUID, and added two new test cases.
+container: task-orchestrator-028-spec-003-cleanup-uuid-aware
+dark-factory-version: v0.57.5
 created: "2026-03-17T00:00:00Z"
 queued: "2026-03-17T13:10:15Z"
+started: "2026-03-17T13:11:58Z"
+completed: "2026-03-17T13:13:11Z"
 ---
 
 <summary>
