@@ -43,11 +43,32 @@ function parseURLParams() {
 }
 
 function setupEventListeners() {
-    document.getElementById('vault-selector').addEventListener('change', handleVaultChange);
+    document.getElementById('vault-selector-toggle').addEventListener('click', toggleVaultDropdown);
+    document.addEventListener('click', handleClickOutsideVaultDropdown);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeVaultDropdown();
+    });
     document.getElementById('refresh-btn').addEventListener('click', loadTasks);
     document.getElementById('copy-btn').addEventListener('click', copyCommand);
     document.getElementById('close-btn').addEventListener('click', closeModal);
     setupDragAndDrop();
+}
+
+function toggleVaultDropdown() {
+    const dropdown = document.getElementById('vault-selector-dropdown');
+    dropdown.classList.toggle('hidden');
+}
+
+function closeVaultDropdown() {
+    const dropdown = document.getElementById('vault-selector-dropdown');
+    dropdown.classList.add('hidden');
+}
+
+function handleClickOutsideVaultDropdown(e) {
+    const container = document.getElementById('vault-selector');
+    if (container && !container.contains(e.target)) {
+        closeVaultDropdown();
+    }
 }
 
 async function loadVaults() {
@@ -58,43 +79,71 @@ async function loadVaults() {
         }
 
         const vaults = await response.json();
-        const selector = document.getElementById('vault-selector');
-
-        // Clear existing options
-        selector.innerHTML = '';
-
-        // Add "All" option
-        const allOption = document.createElement('option');
-        allOption.value = '';
-        allOption.textContent = 'All';
-        selector.appendChild(allOption);
-
-        // Add vault options
-        vaults.forEach(vault => {
-            const option = document.createElement('option');
-            option.value = vault.name;
-            option.textContent = vault.name;
-            selector.appendChild(option);
-        });
-
-        // Set selector based on currentVault (from URL or localStorage)
-        if (currentVault === null) {
-            selector.value = ''; // All
-        } else if (Array.isArray(currentVault)) {
-            // Multiple vaults - can't represent in dropdown, use "All"
-            selector.value = '';
-        } else {
-            selector.value = currentVault;
-        }
+        const dropdown = document.getElementById('vault-selector-dropdown');
+        dropdown.innerHTML = '';
 
         // If no URL params, try loading from localStorage
         if (currentVault === null && !window.location.search) {
-            const savedVault = localStorage.getItem('selectedVault');
-            if (savedVault && vaults.find(v => v.name === savedVault)) {
-                selector.value = savedVault;
-                currentVault = savedVault;
+            // Check new key first
+            const savedVaultsJson = localStorage.getItem('selectedVaults');
+            if (savedVaultsJson !== null) {
+                try {
+                    const savedVaults = JSON.parse(savedVaultsJson);
+                    if (Array.isArray(savedVaults) && savedVaults.length > 0) {
+                        // Validate all saved vaults still exist
+                        const validVaults = savedVaults.filter(v => vaults.find(vault => vault.name === v));
+                        if (validVaults.length > 0) {
+                            currentVault = validVaults.length === 1 ? validVaults[0] : validVaults;
+                        }
+                    }
+                } catch (_) {
+                    // Invalid JSON, ignore
+                }
+            } else {
+                // Migrate old single-select key
+                const oldSavedVault = localStorage.getItem('selectedVault');
+                if (oldSavedVault && vaults.find(v => v.name === oldSavedVault)) {
+                    currentVault = oldSavedVault;
+                    localStorage.setItem('selectedVaults', JSON.stringify([oldSavedVault]));
+                    localStorage.removeItem('selectedVault');
+                }
             }
         }
+
+        // Determine which vaults are selected
+        const selectedSet = new Set();
+        if (currentVault === null) {
+            vaults.forEach(v => selectedSet.add(v.name));
+        } else if (Array.isArray(currentVault)) {
+            currentVault.forEach(v => selectedSet.add(v));
+        } else {
+            selectedSet.add(currentVault);
+        }
+
+        // Build "All" checkbox item
+        const allItem = document.createElement('div');
+        allItem.className = 'vault-selector-item' + (selectedSet.size === vaults.length ? ' checked' : '');
+        const allChecked = currentVault === null;
+        allItem.innerHTML = `<input type="checkbox" id="vault-cb-all" value="__all__" ${allChecked ? 'checked' : ''}><label for="vault-cb-all">All</label>`;
+        allItem.querySelector('input').addEventListener('change', handleAllVaultCheckbox);
+        dropdown.appendChild(allItem);
+
+        // Separator
+        const sep = document.createElement('hr');
+        sep.className = 'vault-selector-separator';
+        dropdown.appendChild(sep);
+
+        // Individual vault checkboxes
+        vaults.forEach(vault => {
+            const item = document.createElement('div');
+            const isChecked = selectedSet.has(vault.name);
+            item.className = 'vault-selector-item' + (isChecked ? ' checked' : '');
+            item.innerHTML = `<input type="checkbox" id="vault-cb-${vault.name}" value="${vault.name}" ${isChecked ? 'checked' : ''}><label for="vault-cb-${vault.name}">${vault.name}</label>`;
+            item.querySelector('input').addEventListener('change', handleVaultCheckboxChange);
+            dropdown.appendChild(item);
+        });
+
+        updateVaultLabel();
 
         // Load tasks
         await loadTasks();
@@ -104,22 +153,81 @@ async function loadVaults() {
     }
 }
 
-function handleVaultChange(e) {
-    const value = e.target.value;
-    currentVault = value === '' ? null : value;
+function handleAllVaultCheckbox() {
+    const dropdown = document.getElementById('vault-selector-dropdown');
+    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#vault-cb-all)');
 
-    // Save to localStorage
-    if (value === '') {
-        localStorage.removeItem('selectedVault');
+    // "All" always checks everything
+    checkboxes.forEach(cb => {
+        cb.checked = true;
+        cb.closest('.vault-selector-item').classList.add('checked');
+    });
+
+    const allCb = document.getElementById('vault-cb-all');
+    allCb.checked = true;
+    allCb.closest('.vault-selector-item').classList.add('checked');
+
+    currentVault = null;
+    saveVaultSelection();
+    updateVaultLabel();
+    updateURL();
+    loadTasks();
+}
+
+function handleVaultCheckboxChange(e) {
+    const dropdown = document.getElementById('vault-selector-dropdown');
+    const checkboxes = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:not(#vault-cb-all)'));
+
+    // Update checked styling
+    e.target.closest('.vault-selector-item').classList.toggle('checked', e.target.checked);
+
+    const checkedVaults = checkboxes.filter(cb => cb.checked).map(cb => cb.value);
+
+    const allCb = document.getElementById('vault-cb-all');
+    if (checkedVaults.length === 0 || checkedVaults.length === checkboxes.length) {
+        // None or all checked → treat as "all"
+        checkboxes.forEach(cb => {
+            cb.checked = true;
+            cb.closest('.vault-selector-item').classList.add('checked');
+        });
+        allCb.checked = true;
+        allCb.closest('.vault-selector-item').classList.add('checked');
+        currentVault = null;
     } else {
-        localStorage.setItem('selectedVault', value);
+        allCb.checked = false;
+        allCb.closest('.vault-selector-item').classList.remove('checked');
+        currentVault = checkedVaults.length === 1 ? checkedVaults[0] : checkedVaults;
     }
 
-    // Update URL
+    saveVaultSelection();
+    updateVaultLabel();
     updateURL();
-
-    // Reload tasks
     loadTasks();
+}
+
+function saveVaultSelection() {
+    if (currentVault === null) {
+        localStorage.removeItem('selectedVaults');
+    } else if (Array.isArray(currentVault)) {
+        localStorage.setItem('selectedVaults', JSON.stringify(currentVault));
+    } else {
+        localStorage.setItem('selectedVaults', JSON.stringify([currentVault]));
+    }
+}
+
+function updateVaultLabel() {
+    const label = document.getElementById('vault-selector-label');
+    if (!label) return;
+
+    if (currentVault === null) {
+        label.textContent = 'All';
+    } else if (Array.isArray(currentVault)) {
+        const text = currentVault.join(', ');
+        label.textContent = text.length > 20 ? text.slice(0, 20) + '...' : text;
+    } else {
+        const text = currentVault;
+        label.textContent = text.length > 20 ? text.slice(0, 20) + '...' : text;
+    }
 }
 
 function filterByAssignee(assignee) {

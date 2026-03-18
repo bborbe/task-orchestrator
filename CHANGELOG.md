@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.16.0
+- feat: Replace single-select vault dropdown with multi-select checkbox dropdown supporting multiple vault filtering, URL persistence via repeated `?vault=` params, and localStorage migration from old `selectedVault` key
+
 ## v0.15.0
 - feat: Add `PATCH /tasks/{task_id}/session` endpoint that stores a `claude_session_id`, resolving display names to UUIDs via `session_resolver` before persisting
 - feat: Wire eager session ID resolution into vault-cli watcher callback so display-name session IDs are resolved to UUIDs after each file change event

@@ -11,9 +11,13 @@
         <header>
             <h1>TaskOrchestrator</h1>
             <div class="header-controls">
-                <select id="vault-selector" class="vault-selector">
-                    <option value="">Loading vaults...</option>
-                </select>
+                <div class="vault-selector" id="vault-selector">
+                    <button class="vault-selector-toggle" id="vault-selector-toggle">
+                        <span id="vault-selector-label">All</span>
+                        <span class="vault-selector-arrow">&#9662;</span>
+                    </button>
+                    <div class="vault-selector-dropdown hidden" id="vault-selector-dropdown"></div>
+                </div>
                 <span id="ws-status" class="ws-status disconnected" title="WebSocket disconnected">●</span>
                 <button id="refresh-btn">↻ Refresh</button>
             </div>

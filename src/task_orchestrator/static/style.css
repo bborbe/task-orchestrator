@@ -39,6 +39,13 @@ h1 {
 }
 
 .vault-selector {
+    position: relative;
+    min-width: 150px;
+    font-size: 0.9rem;
+}
+
+.vault-selector-toggle {
+    width: 100%;
     background: #3a3a3a;
     border: 1px solid #4a4a4a;
     padding: 0.5rem 1rem;
@@ -46,16 +53,76 @@ h1 {
     color: #e0e0e0;
     cursor: pointer;
     font-size: 0.9rem;
-    min-width: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
 }
 
-.vault-selector:hover {
+.vault-selector-toggle:hover {
     background: #4a4a4a;
 }
 
-.vault-selector:focus {
+.vault-selector-toggle:focus {
     outline: 2px solid #60a5fa;
     outline-offset: 2px;
+}
+
+.vault-selector-arrow {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.vault-selector-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    background: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.vault-selector-dropdown.hidden {
+    display: none;
+}
+
+.vault-selector-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    color: #e0e0e0;
+}
+
+.vault-selector-item:hover {
+    background: #3a3a3a;
+}
+
+.vault-selector-item.checked {
+    background: #333a44;
+}
+
+.vault-selector-item input[type="checkbox"] {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.vault-selector-item label {
+    flex: 1;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.vault-selector-separator {
+    border: none;
+    border-bottom: 1px solid #3a3a3a;
+    margin: 0;
 }
 
 .ws-status {
