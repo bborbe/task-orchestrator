@@ -58,10 +58,10 @@ Files to read before making changes:
      ```
    - Replace it with:
      ```python
-     effective_status_filter = status_filter if status_filter is not None else ["in_progress", "completed"]
+     effective_status_filter = status_filter if status_filter is not None else ["todo", "in_progress", "completed"]
      tasks = await client.list_tasks(status_filter=effective_status_filter)
      ```
-   - This ensures that when no `?status=` query param is given, both in_progress and completed tasks are fetched.
+   - This ensures that when no `?status=` query param is given, todo, in_progress, and completed tasks are all fetched. `todo` must be included to preserve the existing Kanban Todo column behavior.
 
 5. **Use `completed_date` for the 8-hour cutoff filter** in `src/task_orchestrator/api/tasks.py`:
    - In the `list_tasks` endpoint, find the block that handles `if t.status == "completed":` (currently checks `t.modified_date`).
@@ -97,7 +97,7 @@ Files to read before making changes:
 
 7. **Add new tests** in `tests/test_api.py`:
 
-   a. **Test default status filter behavior**: When no `status` query param is given, verify that `client.list_tasks` is called with `status_filter=["in_progress", "completed"]`. Use the mock's `assert_awaited_with` or inspect `call_args`.
+   a. **Test default status filter behavior**: When no `status` query param is given, verify that `client.list_tasks` is called with `status_filter=["todo", "in_progress", "completed"]`. Inspect `call_args` on the mock to confirm the value.
 
    b. **Test completed task with recent `completed_date` is visible**: Create a task with `status="completed"` and `completed_date` set to 2 hours ago (ISO 8601 string). Verify the response includes this task with `recently_completed=True`.
 
