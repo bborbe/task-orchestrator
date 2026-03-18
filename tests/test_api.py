@@ -1,6 +1,6 @@
 """Tests for API endpoints."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -828,3 +828,108 @@ def test_list_tasks_warns_on_status_phase_mismatch(
     task = next(t for t in tasks if t["id"] == "Task Status Phase Mismatch")
     assert task["status"] == "in_progress"
     assert task["phase"] is None
+
+
+# --- _parse_defer_date tests ---
+
+
+def test_parse_defer_date_date_only() -> None:
+    """Date-only string returns timezone-aware datetime at midnight UTC."""
+
+    from task_orchestrator.api.tasks import _parse_defer_date
+
+    result = _parse_defer_date("2026-03-19")
+    assert result.tzinfo is not None
+    assert result.utcoffset().total_seconds() == 0  # type: ignore[union-attr]
+    assert result.year == 2026
+    assert result.month == 3
+    assert result.day == 19
+    assert result.hour == 0
+    assert result.minute == 0
+    assert result.second == 0
+
+
+def test_parse_defer_date_rfc3339() -> None:
+    """RFC3339 string returns timezone-aware datetime."""
+    from task_orchestrator.api.tasks import _parse_defer_date
+
+    result = _parse_defer_date("2026-03-19T16:00:00+01:00")
+    assert result.tzinfo is not None
+    assert result.year == 2026
+    assert result.month == 3
+    assert result.day == 19
+
+
+# --- upcoming filtering tests ---
+
+
+def test_list_tasks_past_defer_date_is_active(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Task with defer_date in the past is active (upcoming=False)."""
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Past Deferred Task",
+            status="in_progress",
+            defer_date="2020-01-01T10:00:00+00:00",
+        )
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    tasks = response.json()
+    task = next((t for t in tasks if t["id"] == "Past Deferred Task"), None)
+    assert task is not None
+    assert task["upcoming"] is False
+
+
+def test_list_tasks_upcoming_within_8h(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Task with defer_date within 8 hours is included with upcoming=True."""
+
+    # 4 hours from now
+    defer_dt = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Soon Task", status="in_progress", defer_date=defer_dt)
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    tasks = response.json()
+    task = next((t for t in tasks if t["id"] == "Soon Task"), None)
+    assert task is not None
+    assert task["upcoming"] is True
+
+
+def test_list_tasks_deferred_beyond_8h_excluded(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Task with defer_date more than 8 hours away is excluded entirely."""
+
+    # 10 hours from now
+    defer_dt = (datetime.now(UTC) + timedelta(hours=10)).isoformat()
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Far Future Task", status="in_progress", defer_date=defer_dt)
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Far Future Task" not in task_ids
+
+
+def test_list_tasks_no_defer_date_unaffected(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Task with no defer_date is active (upcoming=False) and unaffected."""
+    mock_vault_client._tasks.append(
+        _make_task(task_id="No Defer Task", status="in_progress", defer_date=None)
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    tasks = response.json()
+    task = next((t for t in tasks if t["id"] == "No Defer Task"), None)
+    assert task is not None
+    assert task["upcoming"] is False

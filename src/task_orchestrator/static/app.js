@@ -406,9 +406,13 @@ async function loadTasks() {
             return normalizePriority(a.priority) - normalizePriority(b.priority);
         });
 
-        // Populate cards by phase
+        // Split into active and upcoming so upcoming always appears at the bottom of each lane
+        const activeTasks = tasks.filter(t => !t.upcoming);
+        const upcomingTasks = tasks.filter(t => t.upcoming);
+
+        // Populate cards by phase: active first, then upcoming
         const validPhases = ['todo', 'planning', 'in_progress', 'ai_review', 'human_review', 'done'];
-        tasks.forEach(task => {
+        [...activeTasks, ...upcomingTasks].forEach(task => {
             // Default to todo if phase is missing or invalid
             const phase = task.phase && validPhases.includes(task.phase) ? task.phase : 'todo';
             const container = document.getElementById(`cards-${phase}`);
@@ -463,6 +467,8 @@ function createTaskCard(task) {
     else if (tier === 1) card.classList.add('urgency-today');
     else if (tier === 2) card.classList.add('urgency-scheduled');
     // tier === 3: no class, default appearance
+
+    if (task.upcoming) card.classList.add('upcoming');
 
     // Drag handlers
     card.addEventListener('dragstart', (e) => {

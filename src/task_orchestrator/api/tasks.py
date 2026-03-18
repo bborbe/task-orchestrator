@@ -5,7 +5,7 @@
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import quote
@@ -113,12 +113,20 @@ async def list_vaults() -> list[VaultResponse]:
     ]
 
 
-def _parse_defer_date(defer_date: str) -> date:
-    """Parse defer_date string, accepting both date-only and full datetime formats."""
+def _parse_defer_date(defer_date: str) -> datetime:
+    """Parse defer_date string into a timezone-aware datetime.
+
+    Accepts both date-only (YYYY-MM-DD) and RFC3339 datetime formats.
+    Date-only values are treated as midnight UTC on that date.
+    """
     try:
-        return date.fromisoformat(defer_date)
+        d = date.fromisoformat(defer_date)
+        return datetime(d.year, d.month, d.day, tzinfo=UTC)
     except ValueError:
-        return datetime.fromisoformat(defer_date).date()
+        dt = datetime.fromisoformat(defer_date)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=UTC)
+        return dt
 
 
 @router.get("/tasks", response_model=list[TaskResponse])
@@ -180,11 +188,22 @@ async def list_tasks(
         if assignee:
             tasks = [t for t in tasks if t.assignee == assignee]
 
-        # Filter out deferred tasks (defer_date in future)
-        today = date.today()
-        tasks = [
-            t for t in tasks if t.defer_date is None or _parse_defer_date(t.defer_date) <= today
-        ]
+        # Filter out deferred tasks; include upcoming (within 8h) with flag set
+        now = datetime.now(UTC)
+        cutoff = now + timedelta(hours=8)
+        visible_tasks = []
+        for t in tasks:
+            if t.defer_date is None:
+                visible_tasks.append(t)
+            else:
+                defer_dt = _parse_defer_date(t.defer_date)
+                if defer_dt <= now:
+                    visible_tasks.append(t)  # available now
+                elif defer_dt <= cutoff:
+                    t.upcoming = True
+                    visible_tasks.append(t)  # upcoming within 8h
+                # else: hidden (defer > 8h away)
+        tasks = visible_tasks
 
         # Filter out blocked tasks (use cache for fast lookup)
         cache = get_status_cache()
@@ -567,5 +586,6 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         claude_session_id=task.claude_session_id,
         assignee=task.assignee,
         blocked_by=task.blocked_by,
+        upcoming=task.upcoming,
         vault=vault_config.name,
     )
