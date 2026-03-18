@@ -1,5 +1,5 @@
 ---
-status: executing
+status: completed
 container: task-orchestrator-031-multi-vault-only-button
 dark-factory-version: v0.57.5
 created: "2026-03-18T12:05:00Z"
