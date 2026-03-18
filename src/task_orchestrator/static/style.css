@@ -119,6 +119,30 @@ h1 {
     white-space: nowrap;
 }
 
+.vault-only-btn {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.vault-selector-item:hover .vault-only-btn {
+    opacity: 1;
+}
+
+.vault-only-btn:hover {
+    background: #4a4a4a;
+    color: #e0e0e0;
+}
+
 .vault-selector-separator {
     border: none;
     border-bottom: 1px solid #3a3a3a;

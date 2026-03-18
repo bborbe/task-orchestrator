@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+- feat: Add "Only" button to vault selector items that selects a single vault on hover-click, and make "All" checkbox a true toggle that unchecks all vaults when all are selected
+
 ## v0.16.0
 - feat: Replace single-select vault dropdown with multi-select checkbox dropdown supporting multiple vault filtering, URL persistence via repeated `?vault=` params, and localStorage migration from old `selectedVault` key
 

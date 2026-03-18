@@ -138,8 +138,26 @@ async function loadVaults() {
             const item = document.createElement('div');
             const isChecked = selectedSet.has(vault.name);
             item.className = 'vault-selector-item' + (isChecked ? ' checked' : '');
-            item.innerHTML = `<input type="checkbox" id="vault-cb-${vault.name}" value="${vault.name}" ${isChecked ? 'checked' : ''}><label for="vault-cb-${vault.name}">${vault.name}</label>`;
+            item.innerHTML = `<input type="checkbox" id="vault-cb-${vault.name}" value="${vault.name}" ${isChecked ? 'checked' : ''}><label for="vault-cb-${vault.name}">${vault.name}</label><button class="vault-only-btn" data-vault="${vault.name}">Only</button>`;
             item.querySelector('input').addEventListener('change', handleVaultCheckboxChange);
+            item.querySelector('.vault-only-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const vaultName = e.target.dataset.vault;
+                const dropdown = document.getElementById('vault-selector-dropdown');
+                const checkboxes = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:not(#vault-cb-all)'));
+                checkboxes.forEach(cb => {
+                    cb.checked = cb.value === vaultName;
+                    cb.closest('.vault-selector-item').classList.toggle('checked', cb.value === vaultName);
+                });
+                const allCb = document.getElementById('vault-cb-all');
+                allCb.checked = false;
+                allCb.closest('.vault-selector-item').classList.remove('checked');
+                currentVault = vaultName;
+                saveVaultSelection();
+                updateVaultLabel();
+                updateURL();
+                loadTasks();
+            });
             dropdown.appendChild(item);
         });
 
@@ -155,17 +173,28 @@ async function loadVaults() {
 
 function handleAllVaultCheckbox() {
     const dropdown = document.getElementById('vault-selector-dropdown');
-    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#vault-cb-all)');
+    const checkboxes = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:not(#vault-cb-all)'));
+    const allChecked = checkboxes.every(cb => cb.checked);
 
-    // "All" always checks everything
-    checkboxes.forEach(cb => {
-        cb.checked = true;
-        cb.closest('.vault-selector-item').classList.add('checked');
-    });
-
-    const allCb = document.getElementById('vault-cb-all');
-    allCb.checked = true;
-    allCb.closest('.vault-selector-item').classList.add('checked');
+    if (allChecked) {
+        // Uncheck all
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            cb.closest('.vault-selector-item').classList.remove('checked');
+        });
+        const allCb = document.getElementById('vault-cb-all');
+        allCb.checked = false;
+        allCb.closest('.vault-selector-item').classList.remove('checked');
+    } else {
+        // Check all
+        checkboxes.forEach(cb => {
+            cb.checked = true;
+            cb.closest('.vault-selector-item').classList.add('checked');
+        });
+        const allCb = document.getElementById('vault-cb-all');
+        allCb.checked = true;
+        allCb.closest('.vault-selector-item').classList.add('checked');
+    }
 
     currentVault = null;
     saveVaultSelection();
@@ -184,12 +213,13 @@ function handleVaultCheckboxChange(e) {
     const checkedVaults = checkboxes.filter(cb => cb.checked).map(cb => cb.value);
 
     const allCb = document.getElementById('vault-cb-all');
-    if (checkedVaults.length === 0 || checkedVaults.length === checkboxes.length) {
-        // None or all checked → treat as "all"
-        checkboxes.forEach(cb => {
-            cb.checked = true;
-            cb.closest('.vault-selector-item').classList.add('checked');
-        });
+    if (checkedVaults.length === 0) {
+        // None checked → empty state (treated as "all" for API)
+        allCb.checked = false;
+        allCb.closest('.vault-selector-item').classList.remove('checked');
+        currentVault = null;
+    } else if (checkedVaults.length === checkboxes.length) {
+        // All checked → treat as "all"
         allCb.checked = true;
         allCb.closest('.vault-selector-item').classList.add('checked');
         currentVault = null;
