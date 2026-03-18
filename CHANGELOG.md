@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.1
+- fix: Update status when dragging tasks — moving to done sets status=completed, moving elsewhere sets status=in_progress
+
 ## v0.18.0
 - feat: Show recently completed tasks (completed within last 8h) at bottom of Done lane with green border and reduced opacity
 

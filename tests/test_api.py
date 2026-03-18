@@ -685,8 +685,8 @@ def test_update_task_phase_uses_vault_cli(
     data = response.json()
     assert data == {"status": "success", "task_id": "Test Task", "phase": "in_progress"}
 
-    called_args = mock_exec.call_args[0]
-    assert called_args == (
+    all_calls = [call[0] for call in mock_exec.call_args_list]
+    assert (
         "vault-cli",
         "task",
         "set",
@@ -695,7 +695,17 @@ def test_update_task_phase_uses_vault_cli(
         "in_progress",
         "--vault",
         "testvault",
-    )
+    ) in all_calls
+    assert (
+        "vault-cli",
+        "task",
+        "set",
+        "Test Task",
+        "status",
+        "in_progress",
+        "--vault",
+        "testvault",
+    ) in all_calls
 
 
 def test_update_task_phase_vault_cli_failure_returns_500(

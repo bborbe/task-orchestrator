@@ -454,6 +454,25 @@ async def update_task_phase(
         if proc.returncode != 0:
             raise HTTPException(status_code=500, detail=stderr.decode())
 
+        # Also update status to match the new phase
+        new_status = "completed" if request.phase == "done" else "in_progress"
+        status_proc = await asyncio.create_subprocess_exec(
+            vault_config.vault_cli_path,
+            "task",
+            "set",
+            task_id,
+            "status",
+            new_status,
+            "--vault",
+            vault_config.name.lower(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _stdout, stderr = await status_proc.communicate()
+
+        if status_proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=stderr.decode())
+
         if _connection_manager:
             await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
 
