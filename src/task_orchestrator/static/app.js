@@ -366,8 +366,8 @@ async function loadTasks() {
             params.set('vault', currentVault);
         }
 
-        // Add other filters
-        params.set('status', 'in_progress');
+        // Add other filters — include completed so recently-completed tasks appear in Done lane
+        params.set('status', 'in_progress,completed');
         params.set('phase', 'todo,planning,in_progress,ai_review,human_review,done');
 
         // Add assignee if set
@@ -406,11 +406,12 @@ async function loadTasks() {
             return normalizePriority(a.priority) - normalizePriority(b.priority);
         });
 
-        // Split into active and upcoming so upcoming always appears at the bottom of each lane
-        const activeTasks = tasks.filter(t => !t.upcoming);
+        // Split tasks: active, upcoming (deferred soon), recently_completed (done lane only)
+        const activeTasks = tasks.filter(t => !t.upcoming && !t.recently_completed);
         const upcomingTasks = tasks.filter(t => t.upcoming);
+        const recentlyCompletedTasks = tasks.filter(t => t.recently_completed);
 
-        // Populate cards by phase: active first, then upcoming
+        // Populate cards: active first, then upcoming per lane, recently-completed always at bottom of done
         const validPhases = ['todo', 'planning', 'in_progress', 'ai_review', 'human_review', 'done'];
         [...activeTasks, ...upcomingTasks].forEach(task => {
             // Default to todo if phase is missing or invalid
@@ -421,6 +422,13 @@ async function loadTasks() {
                 container.appendChild(card);
             }
         });
+        // Recently completed always go to done lane at the very bottom
+        const doneContainer = document.getElementById('cards-done');
+        if (doneContainer) {
+            recentlyCompletedTasks.forEach(task => {
+                doneContainer.appendChild(createTaskCard(task));
+            });
+        }
 
     } catch (error) {
         console.error('Failed to load tasks:', error);
@@ -469,6 +477,7 @@ function createTaskCard(task) {
     // tier === 3: no class, default appearance
 
     if (task.upcoming) card.classList.add('upcoming');
+    if (task.recently_completed) card.classList.add('recently-completed');
 
     // Drag handlers
     card.addEventListener('dragstart', (e) => {

@@ -669,3 +669,8 @@ h1 {
     border-left: 4px solid #9ca3af; /* gray-400 — upcoming/deferred */
     opacity: 0.55;
 }
+
+.task-card.recently-completed {
+    border-left: 4px solid #86efac; /* green-300 — recently completed */
+    opacity: 0.55;
+}

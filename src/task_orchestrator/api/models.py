@@ -30,6 +30,7 @@ class Task:
     assignee: str | None  # From frontmatter: Person assigned to the task
     blocked_by: list[str] | None  # From frontmatter: List of blocking task wikilinks
     upcoming: bool = False  # True if defer_date is within the next 8 hours
+    recently_completed: bool = False  # True if status=completed and modified within 8h
 
 
 class TaskResponse(BaseModel):
@@ -53,6 +54,7 @@ class TaskResponse(BaseModel):
     assignee: str | None
     blocked_by: list[str] | None
     upcoming: bool = False
+    recently_completed: bool = False
     vault: str  # Vault name this task belongs to
 
 

@@ -191,9 +191,23 @@ async def list_tasks(
         # Filter out deferred tasks; include upcoming (within 8h) with flag set
         now = datetime.now(UTC)
         cutoff = now + timedelta(hours=8)
+        lookback = now - timedelta(hours=8)
         visible_tasks = []
         for t in tasks:
-            if t.defer_date is None:
+            if t.status == "completed":
+                # Include recently completed tasks (modified within 8h)
+                if t.modified_date is not None:
+                    mod = (
+                        t.modified_date
+                        if t.modified_date.tzinfo
+                        else t.modified_date.replace(tzinfo=UTC)
+                    )
+                    if mod >= lookback:
+                        t.recently_completed = True
+                        t.phase = "done"
+                        visible_tasks.append(t)
+                # else: completed long ago, hidden
+            elif t.defer_date is None:
                 visible_tasks.append(t)
             else:
                 defer_dt = _parse_defer_date(t.defer_date)
@@ -587,5 +601,6 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         assignee=task.assignee,
         blocked_by=task.blocked_by,
         upcoming=task.upcoming,
+        recently_completed=task.recently_completed,
         vault=vault_config.name,
     )

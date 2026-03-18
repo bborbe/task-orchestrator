@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.0
+- feat: Show recently completed tasks (completed within last 8h) at bottom of Done lane with green border and reduced opacity
+
 ## v0.17.0
 - feat: Add "Only" button to vault selector items that selects a single vault on hover-click, and make "All" checkbox a true toggle that unchecks all vaults when all are selected
 - feat: Show tasks deferred within the next 8 hours at the bottom of their Kanban lane with grey border and reduced opacity; tasks deferred beyond 8 hours remain hidden
