@@ -5,6 +5,7 @@
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -172,7 +173,10 @@ async def list_tasks(
             continue
 
         # Get tasks
-        tasks = await client.list_tasks(status_filter=status_filter)
+        effective_status_filter = (
+            status_filter if status_filter is not None else ["todo", "in_progress", "completed"]
+        )
+        tasks = await client.list_tasks(status_filter=effective_status_filter)
 
         # Filter by phase if specified (tasks with None/invalid phase default to todo)
         if phase_filter:
@@ -195,18 +199,24 @@ async def list_tasks(
         visible_tasks = []
         for t in tasks:
             if t.status == "completed":
-                # Include recently completed tasks (modified within 8h)
-                if t.modified_date is not None:
-                    mod = (
+                # Use completed_date as primary signal; fall back to modified_date
+                cutoff_dt: datetime | None = None
+                if t.completed_date:
+                    with suppress(ValueError, TypeError):
+                        cutoff_dt = datetime.fromisoformat(str(t.completed_date))
+                        if cutoff_dt.tzinfo is None:
+                            cutoff_dt = cutoff_dt.replace(tzinfo=UTC)
+                if cutoff_dt is None and t.modified_date is not None:
+                    cutoff_dt = (
                         t.modified_date
                         if t.modified_date.tzinfo
                         else t.modified_date.replace(tzinfo=UTC)
                     )
-                    if mod >= lookback:
-                        t.recently_completed = True
-                        t.phase = "done"
-                        visible_tasks.append(t)
-                # else: completed long ago, hidden
+                if cutoff_dt is not None and cutoff_dt >= lookback:
+                    t.recently_completed = True
+                    t.phase = "done"
+                    visible_tasks.append(t)
+                # else: completed long ago or no date available, hidden
             elif t.defer_date is None:
                 visible_tasks.append(t)
             else:
@@ -609,6 +619,7 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         project_path=task.project_path,
         description=task.description,
         modified_date=task.modified_date,
+        completed_date=task.completed_date,
         obsidian_url=obsidian_url,
         defer_date=task.defer_date,
         planned_date=task.planned_date,

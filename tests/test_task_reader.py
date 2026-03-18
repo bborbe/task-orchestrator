@@ -79,8 +79,8 @@ async def test_list_tasks_single_status_filter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_multiple_status_filter_uses_all() -> None:
-    """Test list_tasks uses --all flag when multiple statuses requested."""
+async def test_list_tasks_multiple_status_filter_uses_repeated_status_flags() -> None:
+    """Test list_tasks uses repeated --status flags when multiple statuses requested."""
     client = VaultCLIClient("vault-cli", "TestVault")
     task_data = _task_json(status="in_progress")
     proc = _make_proc(0, b"[" + task_data + b"]")
@@ -89,25 +89,26 @@ async def test_list_tasks_multiple_status_filter_uses_all() -> None:
         tasks = await client.list_tasks(status_filter=["in_progress", "todo"])
 
     args = mock_exec.call_args[0]
-    assert "--all" in args
-    assert "--status" not in args
-    # in_progress task should be in result
+    assert "--all" not in args
+    assert "--status" in args
+    # in_progress task should be in result (vault-cli handles filtering server-side)
     assert len(tasks) == 1
     assert tasks[0].status == "in_progress"
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_multiple_status_filter_excludes_non_matching() -> None:
-    """Test list_tasks filters out tasks not in status_filter when using --all."""
+async def test_list_tasks_multiple_status_filter_passes_all_statuses() -> None:
+    """Test list_tasks passes each status as a separate --status flag."""
     client = VaultCLIClient("vault-cli", "TestVault")
-    task_data = _task_json(status="completed")
-    proc = _make_proc(0, b"[" + task_data + b"]")
+    proc = _make_proc(0, b"[]")
 
-    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
-        tasks = await client.list_tasks(status_filter=["in_progress", "todo"])
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)) as mock_exec:
+        await client.list_tasks(status_filter=["in_progress", "todo"])
 
-    # completed task should be filtered out
-    assert len(tasks) == 0
+    args = list(mock_exec.call_args[0])
+    # Find all --status flag values
+    status_values = [args[i + 1] for i, a in enumerate(args) if a == "--status"]
+    assert set(status_values) == {"in_progress", "todo"}
 
 
 @pytest.mark.asyncio

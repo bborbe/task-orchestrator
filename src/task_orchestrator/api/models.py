@@ -29,6 +29,7 @@ class Task:
     claude_session_id: str | None  # From frontmatter: Claude Code session UUID
     assignee: str | None  # From frontmatter: Person assigned to the task
     blocked_by: list[str] | None  # From frontmatter: List of blocking task wikilinks
+    completed_date: str | None = None  # From frontmatter: ISO 8601 datetime when task was completed
     upcoming: bool = False  # True if defer_date is within the next 8 hours
     recently_completed: bool = False  # True if status=completed and modified within 8h
 
@@ -43,6 +44,7 @@ class TaskResponse(BaseModel):
     project_path: str | None
     description: str | None
     modified_date: datetime | None
+    completed_date: str | None = None
     obsidian_url: str
     defer_date: str | None
     planned_date: str | None

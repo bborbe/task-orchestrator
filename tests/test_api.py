@@ -25,6 +25,7 @@ def _make_task(
     category: str | None = "testing",
     assignee: str | None = None,
     blocked_by: list[str] | None = None,
+    completed_date: str | None = None,
     **_kwargs: Any,
 ) -> Task:
     return Task(
@@ -45,6 +46,7 @@ def _make_task(
         claude_session_id=None,
         assignee=assignee,
         blocked_by=blocked_by,
+        completed_date=completed_date,
     )
 
 
@@ -943,3 +945,75 @@ def test_list_tasks_no_defer_date_unaffected(
     task = next((t for t in tasks if t["id"] == "No Defer Task"), None)
     assert task is not None
     assert task["upcoming"] is False
+
+
+# --- completed_date and default status filter tests ---
+
+
+def test_list_tasks_default_status_filter_includes_completed(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """When no status query param is given, list_tasks is called with todo+in_progress+completed."""
+    test_client.get("/api/tasks?vault=TestVault")
+
+    call_args = mock_vault_client.list_tasks.call_args
+    assert call_args is not None
+    effective = call_args.kwargs.get("status_filter") or call_args.args[0]
+    assert set(effective) == {"todo", "in_progress", "completed"}
+
+
+def test_list_tasks_recent_completed_date_is_visible(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Completed task with completed_date 2 hours ago is visible with recently_completed=True."""
+    two_hours_ago = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Recently Done",
+            status="completed",
+            completed_date=two_hours_ago,
+        )
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    tasks = response.json()
+    task = next((t for t in tasks if t["id"] == "Recently Done"), None)
+    assert task is not None
+    assert task["recently_completed"] is True
+
+
+def test_list_tasks_old_completed_date_is_excluded(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Completed task with completed_date 24 hours ago is not included in results."""
+    twenty_four_hours_ago = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Old Done Task",
+            status="completed",
+            completed_date=twenty_four_hours_ago,
+        )
+    )
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Old Done Task" not in task_ids
+
+
+def test_list_tasks_completed_no_completed_date_falls_back_to_modified_date(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """Completed task with completed_date=None falls back to modified_date for visibility."""
+    two_hours_ago = datetime.now(UTC) - timedelta(hours=2)
+    task = _make_task(task_id="Fallback Done", status="completed", completed_date=None)
+    task.modified_date = two_hours_ago
+    mock_vault_client._tasks.append(task)
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    tasks = response.json()
+    task_resp = next((t for t in tasks if t["id"] == "Fallback Done"), None)
+    assert task_resp is not None
+    assert task_resp["recently_completed"] is True

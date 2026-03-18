@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.2
+- fix: Default `/api/tasks` status filter to include completed tasks so the Done column is populated when no `?status=` param is given
+- fix: Use `completed_date` field (with `modified_date` fallback) for the 8-hour recency cutoff on completed tasks
+- fix: Replace multi-status `--all`+Python-filter approach with repeated `--status` flags so vault-cli handles filtering natively
+
 ## v0.18.1
 - fix: Update status when dragging tasks — moving to done sets status=completed, moving elsewhere sets status=in_progress
 

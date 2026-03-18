@@ -40,7 +40,6 @@ class VaultCLIClient:
             "json",
         ]
 
-        needs_python_filter = False
         if show_all:
             args.append("--all")
         elif status_filter is None:
@@ -48,9 +47,9 @@ class VaultCLIClient:
         elif len(status_filter) == 1:
             args += ["--status", status_filter[0]]
         else:
-            # Multiple values: use --all and filter in Python
-            args.append("--all")
-            needs_python_filter = True
+            # Multiple values: use repeated --status flags (vault-cli StringSliceVar)
+            for s in status_filter:
+                args += ["--status", s]
 
         proc = await asyncio.create_subprocess_exec(
             *args,
@@ -63,9 +62,6 @@ class VaultCLIClient:
 
         data: list[dict[str, Any]] = json.loads(stdout.decode())
         tasks = [self._parse_task(item) for item in data]
-
-        if needs_python_filter and status_filter:
-            tasks = [t for t in tasks if t.status in status_filter]
 
         return tasks
 
@@ -132,6 +128,8 @@ class VaultCLIClient:
             with suppress(ValueError, TypeError):
                 modified_date = datetime.fromisoformat(str(data["modified_date"]))
 
+        completed_date: str | None = data.get("completed_date") or None
+
         priority: int | str | None = data.get("priority")
         if priority is not None:
             if isinstance(priority, (bool, float)):
@@ -159,6 +157,7 @@ class VaultCLIClient:
             content=str(data.get("content", "")),
             description=data.get("description"),
             modified_date=modified_date,
+            completed_date=completed_date,
             defer_date=data.get("defer_date"),
             planned_date=data.get("planned_date"),
             due_date=data.get("due_date"),
