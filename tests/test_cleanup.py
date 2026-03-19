@@ -1,11 +1,12 @@
 """Tests for stale session cleanup with assignee-aware logic."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from task_orchestrator.api.models import Task
-from task_orchestrator.cleanup import cleanup_stale_sessions
+from task_orchestrator.cleanup import cleanup_stale_sessions, derive_claude_project_dir
 from task_orchestrator.config import Config, VaultConfig
 
 
@@ -35,12 +36,13 @@ def _make_task(
     )
 
 
-def _make_config(current_user: str = "alice") -> Config:
+def _make_config(current_user: str = "alice", session_project_dir: str = "") -> Config:
     vault = VaultConfig(
         name="testvault",
         vault_path="/vault",
         tasks_folder="Tasks",
         vault_cli_path="vault-cli",
+        session_project_dir=session_project_dir,
     )
     return Config(vaults=[vault], current_user=current_user)
 
@@ -137,3 +139,24 @@ async def test_uuid_session_id_not_cleared_when_file_exists() -> None:
     tasks = [_make_task(session_id="12345678-1234-1234-1234-123456789abc", assignee="alice")]
     cleared = await _run_cleanup(config, tasks, session_file_exists=True)
     assert cleared == 0
+
+
+def test_derive_claude_project_dir_default() -> None:
+    """Without session_project_dir, derives from vault_path."""
+    result = derive_claude_project_dir("/Users/me/vault")
+    assert result == Path.home() / ".claude" / "projects" / "-Users-me-vault"
+
+
+def test_derive_claude_project_dir_with_session_override() -> None:
+    """With session_project_dir set, uses it directly instead of deriving."""
+    result = derive_claude_project_dir(
+        "/Users/me/vault",
+        session_project_dir="/Users/me/.claude/projects/-Users-me-other",
+    )
+    assert str(result) == "/Users/me/.claude/projects/-Users-me-other"
+
+
+def test_derive_claude_project_dir_empty_session_falls_back() -> None:
+    """Empty session_project_dir falls back to vault_path derivation."""
+    result = derive_claude_project_dir("/Users/me/vault", session_project_dir="")
+    assert result == Path.home() / ".claude" / "projects" / "-Users-me-vault"

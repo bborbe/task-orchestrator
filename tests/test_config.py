@@ -133,6 +133,33 @@ def test_load_config_current_user(tmp_path: Path) -> None:
     assert config.current_user == "alice"
 
 
+def test_load_config_session_project_dir(tmp_path: Path) -> None:
+    """load_config populates session_project_dir from vault-cli JSON when present."""
+    cli_vaults = [
+        {
+            "name": "personal",
+            "path": "/personal",
+            "tasks_dir": "Tasks",
+            "session_project_dir": "/home/me/.claude/projects/-personal",
+        }
+    ]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("vaults:\n  personal: {}\n")
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
+        config = load_config(config_file)
+    assert config.vaults[0].session_project_dir == "/home/me/.claude/projects/-personal"
+
+
+def test_load_config_session_project_dir_absent(tmp_path: Path) -> None:
+    """load_config defaults session_project_dir to empty string when absent from CLI output."""
+    cli_vaults = [{"name": "personal", "path": "/personal", "tasks_dir": "Tasks"}]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("vaults:\n  personal: {}\n")
+    with patch("subprocess.run", side_effect=_make_side_effect(cli_vaults)):
+        config = load_config(config_file)
+    assert config.vaults[0].session_project_dir == ""
+
+
 def test_get_vault_returns_correct_vault(tmp_path: Path) -> None:
     """Config.get_vault finds vault by name."""
     cli_vaults = [

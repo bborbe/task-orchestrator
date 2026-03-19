@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.3
+- fix: Use `session_project_dir` from vault-cli config to resolve Claude session files when the vault's sessions land in a non-default project directory
+
 ## v0.18.2
 - fix: Default `/api/tasks` status filter to include completed tasks so the Done column is populated when no `?status=` param is given
 - fix: Use `completed_date` field (with `modified_date` fallback) for the 8-hour recency cutoff on completed tasks

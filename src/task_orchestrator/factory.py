@@ -127,7 +127,9 @@ def start_task_watchers() -> None:
         try:
             # Wire callback to invalidate cache AND broadcast
             def make_callback(vault_cfg: VaultConfig) -> Callable[[str, str, str], None]:
-                project_dir = derive_claude_project_dir(vault_cfg.vault_path)
+                project_dir = derive_claude_project_dir(
+                    vault_cfg.vault_path, vault_cfg.session_project_dir
+                )
 
                 def callback(event_type: str, item_id: str, vault_arg: str) -> None:
                     # Invalidate cache

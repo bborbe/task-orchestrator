@@ -13,8 +13,14 @@ logger = logging.getLogger(__name__)
 _CLEANUP_INTERVAL_SECONDS = 300
 
 
-def derive_claude_project_dir(vault_path: str) -> Path:
-    """Convert vault_path to ~/.claude/projects/<derived> directory."""
+def derive_claude_project_dir(vault_path: str, session_project_dir: str = "") -> Path:
+    """Return the Claude project directory for session file lookup.
+
+    If session_project_dir is provided and non-empty, use it directly.
+    Otherwise derive from vault_path using the standard convention.
+    """
+    if session_project_dir:
+        return Path(session_project_dir).expanduser()
     derived = vault_path.replace("/", "-")
     return Path.home() / ".claude" / "projects" / derived
 
@@ -31,7 +37,7 @@ async def cleanup_stale_sessions(config: Config) -> int:
             tasks = await client.list_tasks(show_all=True)
             tasks_with_session = [t for t in tasks if t.claude_session_id]
 
-            project_dir = derive_claude_project_dir(vault.vault_path)
+            project_dir = derive_claude_project_dir(vault.vault_path, vault.session_project_dir)
 
             for task in tasks_with_session:
                 session_id = task.claude_session_id

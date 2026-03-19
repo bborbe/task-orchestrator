@@ -21,6 +21,7 @@ class VaultConfig:
     vault_name: str = ""  # For obsidian:// URLs, defaults to name.title()
     claude_script: str = "claude"  # Script to run Claude sessions (default: "claude")
     vault_cli_path: str = "vault-cli"  # Path to vault-cli binary
+    session_project_dir: str = ""  # Override Claude project dir for session file lookup
 
 
 @dataclass
@@ -114,6 +115,7 @@ def load_config(config_path: Path = _CONFIG_PATH) -> Config:
                 vault_name=vault_name,
                 claude_script=cli_vault.get("claude_script") or "claude",
                 vault_cli_path=vault_cli_path,
+                session_project_dir=cli_vault.get("session_project_dir") or "",
             )
         )
 

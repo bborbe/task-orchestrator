@@ -552,7 +552,9 @@ async def set_task_session(
         else:
             resolved = resolve_session_id(
                 request.claude_session_id,
-                derive_claude_project_dir(vault_config.vault_path),
+                derive_claude_project_dir(
+                    vault_config.vault_path, vault_config.session_project_dir
+                ),
             )
             stored_value = resolved if resolved is not None else request.claude_session_id
 
