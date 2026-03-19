@@ -42,6 +42,15 @@ def set_connection_manager(manager: "ConnectionManager") -> None:
     _connection_manager = manager
 
 
+def _build_resume_command(vault_config: VaultConfig, session_id: str) -> str:
+    """Build claude --resume command, prefixing with cd when session_project_dir is set."""
+    script = vault_config.claude_script
+    if vault_config.session_project_dir:
+        cwd = vault_config.session_project_dir.replace("~", str(Path.home()))
+        return f'cd "{cwd}" && {script} --resume {session_id}'
+    return f"{script} --resume {session_id}"
+
+
 async def start_vault_cli_session(vault_config: VaultConfig, task_id: str) -> str:
     """Start a Claude session via vault-cli, returns session_id."""
     proc = await asyncio.create_subprocess_exec(
@@ -300,7 +309,7 @@ async def run_task(
         logger.info(f"Session {session_id} created")
 
         # Build command: use vault-specific script from config (handles cd internally)
-        command = f"{vault_config.claude_script} --resume {session_id}"
+        command = _build_resume_command(vault_config, session_id)
 
         logger.info(f"Returning session response: session_id={session_id}, command={command}")
 
@@ -406,7 +415,7 @@ async def execute_slash_command(
         logger.info(f"Session {session_id} created via vault-cli")
 
         # Build resume command
-        command = f"{vault_config.claude_script} --resume {session_id}"
+        command = _build_resume_command(vault_config, session_id)
 
         return SessionResponse(
             session_id=session_id,

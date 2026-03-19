@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 
 from task_orchestrator.__main__ import create_app
 from task_orchestrator.api.models import Task
-from task_orchestrator.config import Config
+from task_orchestrator.api.tasks import _build_resume_command
+from task_orchestrator.config import Config, VaultConfig
 
 
 def _make_task(
@@ -1017,3 +1018,41 @@ def test_list_tasks_completed_no_completed_date_falls_back_to_modified_date(
     task_resp = next((t for t in tasks if t["id"] == "Fallback Done"), None)
     assert task_resp is not None
     assert task_resp["recently_completed"] is True
+
+
+def _make_vault_config(
+    session_project_dir: str = "",
+    claude_script: str = "claude",
+) -> VaultConfig:
+    return VaultConfig(
+        name="test",
+        vault_path="/vault",
+        tasks_folder="Tasks",
+        claude_script=claude_script,
+        session_project_dir=session_project_dir,
+    )
+
+
+def test_build_resume_command_without_session_project_dir() -> None:
+    """Returns plain resume command when session_project_dir is not set."""
+    vault_config = _make_vault_config(session_project_dir="")
+    result = _build_resume_command(vault_config, "abc123")
+    assert result == "claude --resume abc123"
+
+
+def test_build_resume_command_with_session_project_dir() -> None:
+    """Prefixes command with cd <dir> when session_project_dir is set."""
+    vault_config = _make_vault_config(
+        session_project_dir="/home/user/Obsidian/Personal",
+        claude_script="claude-personal.sh",
+    )
+    result = _build_resume_command(vault_config, "abc123")
+    assert result == 'cd "/home/user/Obsidian/Personal" && claude-personal.sh --resume abc123'
+
+
+def test_build_resume_command_expands_tilde() -> None:
+    """Tilde in session_project_dir is expanded to real home path."""
+    vault_config = _make_vault_config(session_project_dir="~/Obsidian/Personal")
+    result = _build_resume_command(vault_config, "abc123")
+    home = str(Path.home())
+    assert result == f'cd "{home}/Obsidian/Personal" && claude --resume abc123'

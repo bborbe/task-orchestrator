@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.4
+- fix: Prefix resume command with `cd <session_project_dir>` when set so Claude finds the session file
+
 ## v0.18.3
 - fix: Use `session_project_dir` from vault-cli config to resolve Claude session files when the vault's sessions land in a non-default project directory
 
