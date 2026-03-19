@@ -4,11 +4,11 @@ created: "2026-03-19T10:52:03Z"
 ---
 
 <summary>
-- Vaults that use a custom Claude launch script (e.g. family, openclaw) now look in the correct Claude project directory for session files
-- A new `session_project_dir` field on VaultConfig captures the override from vault-cli config
-- When `session_project_dir` is set, cleanup, watcher, and API session resolution all use it instead of deriving the project dir from vault_path
-- Existing vaults without `session_project_dir` continue to work unchanged (falls back to vault_path derivation)
-- The derive_claude_project_dir function accepts an optional override parameter
+- Cleanup uses the configured session project directory (if set) when looking for Claude session files, falling back to the vault path when not set
+- A new optional field in vault config captures the override directory from vault-cli config
+- When the override is set, cleanup, watcher, and API session resolution all use it instead of deriving the directory from vault path
+- Vaults without the override continue to work unchanged
+- Works for all vaults regardless of whether a custom Claude script is used
 </summary>
 
 <objective>
