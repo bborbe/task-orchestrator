@@ -60,8 +60,8 @@ class VaultCLIClient:
         if proc.returncode != 0:
             raise RuntimeError(f"vault-cli task list failed: {stderr.decode().strip()}")
 
-        data: list[dict[str, Any]] = json.loads(stdout.decode())
-        tasks = [self._parse_task(item) for item in data]
+        data: list[dict[str, Any]] | None = json.loads(stdout.decode())
+        tasks = [self._parse_task(item) for item in data] if data else []
 
         return tasks
 

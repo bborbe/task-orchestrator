@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.18.5
+- fix: Handle null response from vault-cli task list for vaults with no tasks
+- chore: Add uv cache mount to dark-factory config
+- chore: Use hatch-vcs for dynamic versioning from git tags
+- chore: Add autoRelease to dark-factory config
+
 ## v0.18.4
 - fix: Prefix resume command with `cd <session_project_dir>` when set so Claude finds the session file
 
