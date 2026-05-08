@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.0
+
+- feat: Extend cleanup loop to resolve and clear stale `claude_session_id` values on goals, matching task parity — display names are resolved to UUIDs on each cleanup pass (up to one cleanup-cycle latency); unresolved names and stale UUIDs are cleared
+
 ## v0.19.0
 
 - feat: Add `Goal` dataclass to models and extend `VaultCLIClient` with `list_goals`, `set_goal_field`, `clear_goal_field` methods for vault-cli goal subcommand integration

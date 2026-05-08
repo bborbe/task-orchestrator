@@ -4,8 +4,9 @@ import asyncio
 import logging
 from pathlib import Path
 
+from task_orchestrator.api.models import Goal
 from task_orchestrator.config import Config
-from task_orchestrator.session_resolver import is_uuid
+from task_orchestrator.session_resolver import is_uuid, resolve_session_id
 from task_orchestrator.vault_cli_client import VaultCLIClient
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,143 @@ async def cleanup_stale_sessions(config: Config) -> int:
                         e,
                         exc_info=True,
                     )
+
+            # Goal cleanup — independent try/except so a goal-list failure
+            # does not abort the task pass that already completed above
+            try:
+                goals: list[Goal] = await client.list_goals(show_all=True)
+                goals_with_session = [g for g in goals if g.claude_session_id]
+
+                for goal in goals_with_session:
+                    session_id = goal.claude_session_id
+                    assert session_id is not None  # narrowing for type checker
+
+                    if "/" in session_id or "\\" in session_id:
+                        logger.warning(
+                            "[Cleanup] Skipping goal %s in vault %s: session_id contains"
+                            " invalid chars",
+                            goal.id,
+                            vault.name,
+                        )
+                        continue
+
+                    if not is_uuid(session_id):
+                        resolved = resolve_session_id(session_id, project_dir)
+                        if resolved is not None:
+                            try:
+                                set_args = [
+                                    vault.vault_cli_path,
+                                    "goal",
+                                    "set",
+                                    goal.id,
+                                    "claude_session_id",
+                                    resolved,
+                                    "--vault",
+                                    vault.name,
+                                ]
+                                proc = await asyncio.create_subprocess_exec(
+                                    *set_args,
+                                    stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.PIPE,
+                                )
+                                _stdout, stderr = await proc.communicate()
+                                if proc.returncode != 0:
+                                    logger.warning(
+                                        "[Cleanup] Failed to set resolved session for goal %s"
+                                        " in vault %s: %s",
+                                        goal.id,
+                                        vault.name,
+                                        stderr.decode().strip(),
+                                    )
+                                else:
+                                    logger.info(
+                                        "[Cleanup] Resolved session '%s' -> '%s' for goal %s"
+                                        " in vault %s",
+                                        session_id,
+                                        resolved,
+                                        goal.id,
+                                        vault.name,
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    "[Cleanup] Exception resolving session for goal %s"
+                                    " in vault %s: %s",
+                                    goal.id,
+                                    vault.name,
+                                    e,
+                                )
+                            continue  # never fall through to the clear block
+                        else:
+                            logger.info(
+                                "[Cleanup] Clearing unresolved display-name session '%s'"
+                                " from goal %s in vault %s",
+                                session_id,
+                                goal.id,
+                                vault.name,
+                            )
+                            # fall through to clear block
+                    else:
+                        if goal.assignee and goal.assignee != config.current_user:
+                            logger.info(
+                                "[Cleanup] Clearing session %s from goal %s: "
+                                "assigned to %s, not current user %s",
+                                session_id,
+                                goal.id,
+                                goal.assignee,
+                                config.current_user,
+                            )
+                        else:
+                            session_file = project_dir / f"{session_id}.jsonl"
+                            if session_file.exists():
+                                continue
+
+                    try:
+                        clear_args = [
+                            vault.vault_cli_path,
+                            "goal",
+                            "clear",
+                            goal.id,
+                            "claude_session_id",
+                            "--vault",
+                            vault.name,
+                        ]
+                        proc = await asyncio.create_subprocess_exec(
+                            *clear_args,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        _stdout, stderr = await proc.communicate()
+                        if proc.returncode != 0:
+                            logger.error(
+                                "[Cleanup] Failed to clear session for goal %s in vault %s: %s",
+                                goal.id,
+                                vault.name,
+                                stderr.decode().strip(),
+                            )
+                        else:
+                            logger.info(
+                                "[Cleanup] Cleared stale session %s from goal %s in vault %s",
+                                session_id,
+                                goal.id,
+                                vault.name,
+                            )
+                            cleared += 1
+                    except Exception as e:
+                        logger.error(
+                            "[Cleanup] Exception clearing session for goal %s in vault %s: %s",
+                            goal.id,
+                            vault.name,
+                            e,
+                            exc_info=True,
+                        )
+
+            except Exception as e:
+                logger.error(
+                    "[Cleanup] Exception processing goals for vault %s: %s",
+                    vault.name,
+                    e,
+                    exc_info=True,
+                )
 
         except Exception as e:
             logger.error(

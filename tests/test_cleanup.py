@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from task_orchestrator.api.models import Task
+from task_orchestrator.api.models import Goal, Task
 from task_orchestrator.cleanup import cleanup_stale_sessions, derive_claude_project_dir
 from task_orchestrator.config import Config, VaultConfig
 
@@ -36,6 +36,19 @@ def _make_task(
     )
 
 
+def _make_goal(
+    session_id: str = "12345678-1234-1234-1234-123456789abc",
+    assignee: str | None = None,
+    goal_id: str = "goal-1",
+) -> Goal:
+    return Goal(
+        id=goal_id,
+        title="Test Goal",
+        claude_session_id=session_id,
+        assignee=assignee,
+    )
+
+
 def _make_config(current_user: str = "alice", session_project_dir: str = "") -> Config:
     vault = VaultConfig(
         name="testvault",
@@ -51,6 +64,7 @@ async def _run_cleanup(config: Config, tasks: list[Task], session_file_exists: b
     """Helper: run cleanup_stale_sessions with mocked VaultCLIClient and filesystem."""
     mock_client = AsyncMock()
     mock_client.list_tasks = AsyncMock(return_value=tasks)
+    mock_client.list_goals = AsyncMock(return_value=[])
 
     mock_proc = AsyncMock()
     mock_proc.returncode = 0
@@ -160,3 +174,151 @@ def test_derive_claude_project_dir_empty_session_falls_back() -> None:
     """Empty session_project_dir falls back to vault_path derivation."""
     result = derive_claude_project_dir("/Users/me/vault", session_project_dir="")
     assert result == Path.home() / ".claude" / "projects" / "-Users-me-vault"
+
+
+async def _run_cleanup_with_goals(
+    config: Config,
+    tasks: list[Task],
+    goals: list[Goal],
+    session_file_exists: bool,
+    goal_set_returncode: int = 0,
+    goal_clear_returncode: int = 0,
+) -> int:
+    """Helper: run cleanup with both task and goal mocks."""
+    mock_client = AsyncMock()
+    mock_client.list_tasks = AsyncMock(return_value=tasks)
+    mock_client.list_goals = AsyncMock(return_value=goals)
+
+    async def _make_proc(*args: object, **kwargs: object) -> AsyncMock:
+        proc = AsyncMock()
+        args_list = list(args)
+        if "goal" in args_list and "set" in args_list:
+            proc.returncode = goal_set_returncode
+        elif "goal" in args_list and "clear" in args_list:
+            proc.returncode = goal_clear_returncode
+        else:
+            proc.returncode = 0
+        proc.communicate = AsyncMock(return_value=(b"", b""))
+        return proc
+
+    with (
+        patch("task_orchestrator.cleanup.VaultCLIClient", return_value=mock_client),
+        patch("task_orchestrator.cleanup.Path.exists", return_value=session_file_exists),
+        patch(
+            "task_orchestrator.cleanup.asyncio.create_subprocess_exec",
+            side_effect=_make_proc,
+        ),
+    ):
+        return await cleanup_stale_sessions(config)
+
+
+@pytest.mark.asyncio
+async def test_goal_display_name_resolved_to_uuid(tmp_path: Path) -> None:
+    """A goal with a non-UUID display-name session ID is resolved to UUID via cleanup."""
+    config = _make_config(current_user="alice")
+    goals = [_make_goal(session_id="ai-knowledge-sharing", assignee="alice")]
+
+    mock_client = AsyncMock()
+    mock_client.list_tasks = AsyncMock(return_value=[])
+    mock_client.list_goals = AsyncMock(return_value=goals)
+
+    set_proc = AsyncMock()
+    set_proc.returncode = 0
+    set_proc.communicate = AsyncMock(return_value=(b"", b""))
+
+    with (
+        patch("task_orchestrator.cleanup.VaultCLIClient", return_value=mock_client),
+        patch("task_orchestrator.cleanup.Path.exists", return_value=False),
+        patch(
+            "task_orchestrator.cleanup.asyncio.create_subprocess_exec",
+            return_value=set_proc,
+        ),
+        patch(
+            "task_orchestrator.cleanup.resolve_session_id",
+            return_value="abcdef12-1234-1234-1234-abcdef123456",
+        ),
+    ):
+        cleared = await cleanup_stale_sessions(config)
+
+    # Resolution is an update, not a clear — cleared count stays 0
+    assert cleared == 0
+
+
+@pytest.mark.asyncio
+async def test_goal_uuid_cleared_on_missing_file() -> None:
+    """A goal with UUID session ID is cleared when the session file no longer exists."""
+    config = _make_config(current_user="alice")
+    goals = [_make_goal(session_id="12345678-1234-1234-1234-123456789abc", assignee="alice")]
+    cleared = await _run_cleanup_with_goals(config, [], goals, session_file_exists=False)
+    assert cleared == 1
+
+
+@pytest.mark.asyncio
+async def test_goal_cleared_on_assignee_mismatch() -> None:
+    """A goal assigned to another user has its session ID cleared."""
+    config = _make_config(current_user="alice")
+    goals = [_make_goal(session_id="12345678-1234-1234-1234-123456789abc", assignee="bob")]
+    cleared = await _run_cleanup_with_goals(config, [], goals, session_file_exists=True)
+    assert cleared == 1
+
+
+@pytest.mark.asyncio
+async def test_goal_set_error_path_no_clear() -> None:
+    """When vault-cli goal set fails, a warning is logged and the goal is NOT cleared."""
+    config = _make_config(current_user="alice")
+    goals = [_make_goal(session_id="ai-knowledge-sharing", assignee="alice")]
+
+    mock_client = AsyncMock()
+    mock_client.list_tasks = AsyncMock(return_value=[])
+    mock_client.list_goals = AsyncMock(return_value=goals)
+
+    set_proc = AsyncMock()
+    set_proc.returncode = 1  # set fails
+    set_proc.communicate = AsyncMock(return_value=(b"", b"goal not found"))
+
+    with (
+        patch("task_orchestrator.cleanup.VaultCLIClient", return_value=mock_client),
+        patch("task_orchestrator.cleanup.Path.exists", return_value=False),
+        patch(
+            "task_orchestrator.cleanup.asyncio.create_subprocess_exec",
+            return_value=set_proc,
+        ),
+        patch(
+            "task_orchestrator.cleanup.resolve_session_id",
+            return_value="abcdef12-1234-1234-1234-abcdef123456",
+        ),
+    ):
+        cleared = await cleanup_stale_sessions(config)
+
+    # Set failed → no resolution, no clear
+    assert cleared == 0
+
+
+@pytest.mark.asyncio
+async def test_goal_list_failure_does_not_abort_task_pass() -> None:
+    """When vault-cli goal list raises, the task pass for that vault still completes."""
+    config = _make_config(current_user="alice")
+    tasks = [_make_task(assignee="alice")]  # UUID session_id, file missing → cleared
+
+    mock_client = AsyncMock()
+    mock_client.list_tasks = AsyncMock(return_value=tasks)
+    mock_client.list_goals = AsyncMock(
+        side_effect=RuntimeError("vault-cli goal list failed: unknown subcommand")
+    )
+
+    mock_proc = AsyncMock()
+    mock_proc.returncode = 0
+    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+
+    with (
+        patch("task_orchestrator.cleanup.VaultCLIClient", return_value=mock_client),
+        patch("task_orchestrator.cleanup.Path.exists", return_value=False),
+        patch(
+            "task_orchestrator.cleanup.asyncio.create_subprocess_exec",
+            return_value=mock_proc,
+        ),
+    ):
+        cleared = await cleanup_stale_sessions(config)
+
+    # Task was cleared successfully despite goal list failure
+    assert cleared == 1
