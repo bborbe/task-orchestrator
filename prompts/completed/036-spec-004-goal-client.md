@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [004-goal-session-resolution]
 summary: Added Goal dataclass to models.py and extended VaultCLIClient with list_goals, set_goal_field, clear_goal_field methods plus _parse_goal, with 8 new tests covering all paths.
 container: task-orchestrator-036-spec-004-goal-client
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-08T11:45:00Z"
 queued: "2026-05-08T11:54:43Z"
 started: "2026-05-08T11:54:44Z"
+completed: "2026-05-08T11:56:11Z"
 branch: dark-factory/goal-session-resolution
 ---
 
