@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: 'Added one-click ''Assign to me'' affordance: PATCH /tasks/{id}/assign-to-me endpoint, inline link on unassigned cards, CSS styles, 5 new tests, and CHANGELOG entry for v0.23.0'
 container: task-orchestrator-041-assign-to-me-card-link
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T16:49:37Z"
 queued: "2026-05-10T16:49:37Z"
 started: "2026-05-10T16:49:38Z"
+completed: "2026-05-10T16:51:53Z"
 ---
 <summary>
 - Unassigned task cards on the Kanban board show a small inline "+ Assign to me" link in the assignee badge slot
