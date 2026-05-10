@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.24.0
+
+- fix: Surface real backend error messages in UI alerts — adds `parseErrorResponse()` helper, replaces generic "Failed to execute command" with actual stderr (e.g. "Error: incomplete subtasks: 11 pending" from vault-cli refusals); also replaces raw `{"detail": "..."}` JSON envelopes shown verbatim at four other fetch callsites
+
 ## v0.23.0
 
 - feat: One-click "Assign to me" on unassigned task cards — adds `PATCH /tasks/{id}/assign-to-me` endpoint and inline link rendered in the assignee badge slot when a card has no assignee; clicking sets `assignee` to the configured `current_user` via vault-cli and re-renders the board

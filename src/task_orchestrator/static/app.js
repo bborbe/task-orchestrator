@@ -8,6 +8,23 @@ let startingTasks = new Set(); // Track tasks currently being started
 
 const POLL_INTERVAL_MS = 60000; // Fallback polling every 60 seconds
 
+async function parseErrorResponse(response) {
+    // Backend returns FastAPI HTTPException → {"detail": "..."} as application/json.
+    // Try JSON first; fall back to text for non-JSON responses (proxy errors, network failures).
+    try {
+        const body = await response.json();
+        if (body && typeof body.detail === 'string') return body.detail;
+        return JSON.stringify(body);
+    } catch {
+        try {
+            const text = await response.text();
+            return text || `HTTP ${response.status}`;
+        } catch {
+            return `HTTP ${response.status}`;
+        }
+    }
+}
+
 // Load tasks on page load
 document.addEventListener('DOMContentLoaded', () => {
     parseURLParams();
@@ -358,8 +375,7 @@ async function handleDrop(e) {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
+            throw new Error(await parseErrorResponse(response));
         }
 
         // Reload tasks to reflect changes
@@ -626,8 +642,7 @@ async function runTask(taskId) {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
+            throw new Error(await parseErrorResponse(response));
         }
 
         const data = await response.json();
@@ -993,8 +1008,7 @@ async function handleMenuAction(taskId, action) {
             });
 
             if (!response.ok) {
-                const error = await response.text();
-                throw new Error(error);
+                throw new Error(await parseErrorResponse(response));
             }
 
             await loadTasks();
@@ -1084,7 +1098,7 @@ async function executeSlashCommand(taskId, commandType) {
         );
 
         if (!response.ok) {
-            throw new Error('Failed to execute command');
+            throw new Error(await parseErrorResponse(response));
         }
 
         const data = await response.json();
@@ -1117,7 +1131,7 @@ async function executeSlashCommand(taskId, commandType) {
         loadingModal.classList.add('hidden');
 
         console.error('Error executing slash command:', error);
-        alert(`Failed to execute command: ${error.message}`);
+        alert(`Command failed: ${error.message}`);
     }
 }
 
@@ -1134,8 +1148,7 @@ async function clearTaskSession(taskId) {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error);
+            throw new Error(await parseErrorResponse(response));
         }
 
         // Update cache
