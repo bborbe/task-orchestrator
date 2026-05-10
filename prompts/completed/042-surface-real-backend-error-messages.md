@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: 'Added parseErrorResponse() helper to app.js and applied it at all 5 error-surfacing callsites, eliminating the broken ''Failed to execute command: Failed to execute command'' doubled-prefix and raw JSON envelope display; updated CHANGELOG.md with v0.24.0 entry.'
 container: task-orchestrator-042-surface-real-backend-error-messages
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T18:55:53Z"
 queued: "2026-05-10T18:55:53Z"
 started: "2026-05-10T18:55:55Z"
+completed: "2026-05-10T18:58:46Z"
 ---
 <summary>
 - The Kanban UI shows the actual backend error text (e.g. `Error: incomplete subtasks: 11 pending`) instead of the generic placeholder "Failed to execute command" or a raw JSON envelope like `{"detail":"..."}`
