@@ -1,7 +1,7 @@
 // TaskOrchestrator Kanban Board
 
 let currentVault = null; // null = "All", or vault name
-let currentAssignee = null;
+let currentAssignees = [];
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
 let startingTasks = new Set(); // Track tasks currently being started
@@ -38,8 +38,8 @@ function parseURLParams() {
         currentVault = vaultParams; // Multiple vaults
     }
 
-    // Parse assignee parameter
-    currentAssignee = params.get('assignee');
+    // Parse assignee parameter(s) — supports repeated form (?assignee=a&assignee=b)
+    currentAssignees = params.getAll('assignee');
 }
 
 function setupEventListeners() {
@@ -261,11 +261,12 @@ function updateVaultLabel() {
 }
 
 function filterByAssignee(assignee) {
-    // Toggle filter - if clicking same assignee, clear it
-    if (currentAssignee === assignee) {
-        currentAssignee = null;
+    // Toggle membership in the array - if already present, remove; otherwise add
+    const idx = currentAssignees.indexOf(assignee);
+    if (idx === -1) {
+        currentAssignees.push(assignee);
     } else {
-        currentAssignee = assignee;
+        currentAssignees.splice(idx, 1);
     }
 
     // Update URL
@@ -287,10 +288,8 @@ function updateURL() {
         params.set('vault', currentVault);
     }
 
-    // Add assignee if set
-    if (currentAssignee) {
-        params.set('assignee', currentAssignee);
-    }
+    // Add assignee parameter(s) — emit one repeated param per value (preserves empty-token "unassigned" marker)
+    currentAssignees.forEach(a => params.append('assignee', a));
 
     // Update URL without reload
     const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -370,10 +369,8 @@ async function loadTasks() {
         params.set('status', 'in_progress,completed');
         params.set('phase', 'todo,planning,in_progress,ai_review,human_review,done');
 
-        // Add assignee if set
-        if (currentAssignee) {
-            params.set('assignee', currentAssignee);
-        }
+        // Add assignee parameter(s) — pass through every value the user selected
+        currentAssignees.forEach(a => params.append('assignee', a));
 
         // Fetch tasks
         const response = await fetch(`/api/tasks?${params.toString()}`);
@@ -522,7 +519,7 @@ function createTaskCard(task) {
         : '';
 
     // Assignee badge (if present) - clickable to filter
-    const isActiveFilter = currentAssignee === task.assignee;
+    const isActiveFilter = currentAssignees.includes(task.assignee);
     const assigneeBadge = task.assignee
         ? `<span class="assignee-badge clickable ${isActiveFilter ? 'active' : ''}" onclick="filterByAssignee('${escapeHtml(task.assignee)}')" title="${isActiveFilter ? 'Clear filter' : 'Filter by ' + escapeHtml(task.assignee)}">
              <span class="assignee-icon">👤</span><span>${escapeHtml(task.assignee)}</span>

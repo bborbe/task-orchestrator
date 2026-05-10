@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-10T15:37:31Z"
 generating: "2026-05-10T15:37:32Z"
 prompted: "2026-05-10T15:41:24Z"
+verifying: "2026-05-10T16:04:36Z"
 branch: dark-factory/unify-task-list-filter-syntax
 ---
 

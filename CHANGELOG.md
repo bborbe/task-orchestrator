@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.22.0
+
+- feat: Support multi-value assignee URL params in Kanban board — repeated `?assignee=a&assignee=b` form is now read, stored, forwarded to the API, and written back to the URL; empty-token (`?assignee=`) unassigned marker round-trips correctly
+
 ## v0.21.0
 
 - feat: Unify GET /tasks filter syntax — status, phase, and assignee now accept both repeated (?x=a&x=b) and comma-separated (?x=a,b) forms; assignee empty-string token matches unassigned tasks; vault gains comma-split support alongside existing repeated-param support
