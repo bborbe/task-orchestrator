@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Migrated vault-cli watcher from `task watch` to `watch`, added `_try_resolve_goal_session` in factory.py, and dispatches on the new `type` field per event for goal/task/theme/objective events.
 container: task-orchestrator-048-migrate-watcher-to-vault-cli-watch-with-goal-resolver
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T22:34:02Z"
 queued: "2026-05-10T22:34:02Z"
 started: "2026-05-10T22:34:03Z"
+completed: "2026-05-10T22:36:59Z"
 ---
 <summary>
 - task-orchestrator stops invoking the deprecated `vault-cli task watch` subcommand and migrates to the new canonical `vault-cli watch` subcommand
