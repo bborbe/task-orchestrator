@@ -160,6 +160,7 @@ async def list_tasks(
     status: Annotated[list[str] | None, Query()] = None,
     phase: Annotated[list[str] | None, Query()] = None,
     assignee: Annotated[list[str] | None, Query()] = None,
+    goal: Annotated[list[str] | None, Query()] = None,
 ) -> list[TaskResponse]:
     """List tasks from Obsidian vault(s).
 
@@ -216,6 +217,13 @@ async def list_tasks(
                     (token == "" and not t.assignee) or (token != "" and t.assignee == token)
                     for token in assignee_filter
                 )
+            ]
+
+        # Filter by goal if specified
+        goal_filter = _flatten_filter(goal)
+        if goal_filter is not None:
+            tasks = [
+                t for t in tasks if t.goals is not None and any(g in t.goals for g in goal_filter)
             ]
 
         # Filter out deferred tasks; include upcoming (within 8h) with flag set
@@ -715,4 +723,5 @@ def _task_to_response(task: Task, vault_config: VaultConfig) -> TaskResponse:
         upcoming=task.upcoming,
         recently_completed=task.recently_completed,
         vault=vault_config.name,
+        goals=task.goals,
     )

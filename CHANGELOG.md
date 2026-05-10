@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.28.0
+
+- feat: Add goal filter to GET /tasks — new goals field on TaskResponse (wiki-link brackets stripped at parse time), goal query param accepts repeated and comma-separated forms, filters by set membership with OR semantics
+
 ## v0.27.0
 
 - feat: Status filter dropdown in the Kanban header — mirrors the vault dropdown UX, multi-select checkboxes for todo/in_progress/completed/hold/aborted, no need to hand-edit URL

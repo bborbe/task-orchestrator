@@ -32,6 +32,9 @@ class Task:
     completed_date: str | None = None  # From frontmatter: ISO 8601 datetime when task was completed
     upcoming: bool = False  # True if defer_date is within the next 8 hours
     recently_completed: bool = False  # True if status=completed and modified within 8h
+    goals: list[str] | None = (
+        None  # From frontmatter: list of goal names with [[ ]] brackets stripped
+    )
 
 
 @dataclass
@@ -68,6 +71,7 @@ class TaskResponse(BaseModel):
     upcoming: bool = False
     recently_completed: bool = False
     vault: str  # Vault name this task belongs to
+    goals: list[str] | None = None
 
 
 class SessionResponse(BaseModel):

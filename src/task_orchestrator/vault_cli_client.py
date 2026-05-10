@@ -208,6 +208,17 @@ class VaultCLIClient:
         elif blocked_by is not None:
             blocked_by = None
 
+        raw_goals = data.get("goals")
+        goals: list[str] | None = None
+        if isinstance(raw_goals, list) and raw_goals:
+            stripped = []
+            for item in raw_goals:
+                s = str(item)
+                if s.startswith("[[") and s.endswith("]]"):
+                    s = s[2:-2]
+                stripped.append(s)
+            goals = stripped if stripped else None
+
         task_id = str(data.get("name", data.get("id", "")))
         return Task(
             id=task_id,
@@ -228,6 +239,7 @@ class VaultCLIClient:
             claude_session_id=data.get("claude_session_id"),
             assignee=data.get("assignee"),
             blocked_by=blocked_by,
+            goals=goals,
         )
 
     def _parse_goal(self, data: dict[str, Any]) -> Goal:

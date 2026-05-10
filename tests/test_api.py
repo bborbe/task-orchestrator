@@ -13,6 +13,7 @@ from task_orchestrator.__main__ import create_app
 from task_orchestrator.api.models import Task
 from task_orchestrator.api.tasks import _build_resume_command
 from task_orchestrator.config import Config, VaultConfig
+from task_orchestrator.vault_cli_client import VaultCLIClient
 
 
 def _make_task(
@@ -28,6 +29,7 @@ def _make_task(
     assignee: str | None = None,
     blocked_by: list[str] | None = None,
     completed_date: str | None = None,
+    goals: list[str] | None = None,
     **_kwargs: Any,
 ) -> Task:
     return Task(
@@ -49,6 +51,7 @@ def _make_task(
         assignee=assignee,
         blocked_by=blocked_by,
         completed_date=completed_date,
+        goals=goals,
     )
 
 
@@ -1469,3 +1472,183 @@ def test_list_tasks_assignee_whitespace_matches_unassigned(
     task_ids = [t["id"] for t in response.json()]
     assert "Unassigned Task" in task_ids
     assert "Alice Task" not in task_ids
+
+
+# --- goal filter and parser tests ---
+
+
+def test_parse_task_goals_missing() -> None:
+    """_parse_task returns goals=None when goals key is absent from vault-cli JSON."""
+    client = object.__new__(VaultCLIClient)
+    task = client._parse_task({"name": "T1", "title": "Test", "status": "in_progress"})
+    assert task.goals is None
+
+
+def test_parse_task_goals_empty_list() -> None:
+    """_parse_task returns goals=None when goals frontmatter is an empty list."""
+    client = object.__new__(VaultCLIClient)
+    task = client._parse_task({"name": "T1", "title": "Test", "status": "in_progress", "goals": []})
+    assert task.goals is None
+
+
+def test_parse_task_goals_wiki_links_stripped() -> None:
+    """_parse_task strips [[...]] brackets from goal entries, preserving the inner name."""
+    client = object.__new__(VaultCLIClient)
+    task = client._parse_task(
+        {
+            "name": "T1",
+            "title": "Test",
+            "status": "in_progress",
+            "goals": ["[[Eliminate Agent Task Rot]]", "[[Ship It]]"],
+        }
+    )
+    assert task.goals == ["Eliminate Agent Task Rot", "Ship It"]
+
+
+def test_parse_task_goals_no_brackets_stored_as_is() -> None:
+    """_parse_task preserves bracketless goal entries verbatim (no transformation)."""
+    client = object.__new__(VaultCLIClient)
+    task = client._parse_task(
+        {
+            "name": "T1",
+            "title": "Test",
+            "status": "in_progress",
+            "goals": ["Eliminate Agent Task Rot", "Ship It"],
+        }
+    )
+    assert task.goals == ["Eliminate Agent Task Rot", "Ship It"]
+
+
+def test_list_tasks_goal_filter_single(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """GET /tasks?goal=A returns only tasks whose goals list contains 'A'."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Task A", status="in_progress", goals=["A"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task B", status="in_progress", goals=["B"]))
+    mock_vault_client._tasks.append(_make_task(task_id="No Goals Task", status="in_progress"))
+
+    response = test_client.get("/api/tasks?vault=TestVault&goal=A")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Task A" in task_ids
+    assert "Task B" not in task_ids
+    assert "No Goals Task" not in task_ids
+
+
+def test_list_tasks_goal_filter_repeated(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """GET /tasks?goal=A&goal=B returns the union of tasks matching A or B."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Task A", status="in_progress", goals=["A"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task B", status="in_progress", goals=["B"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task C", status="in_progress", goals=["C"]))
+
+    response = test_client.get("/api/tasks?vault=TestVault&goal=A&goal=B")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Task A" in task_ids
+    assert "Task B" in task_ids
+    assert "Task C" not in task_ids
+
+
+def test_list_tasks_goal_filter_comma_separated(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """GET /tasks?goal=A,B returns the same result as ?goal=A&goal=B."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Task A", status="in_progress", goals=["A"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task B", status="in_progress", goals=["B"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task C", status="in_progress", goals=["C"]))
+
+    response = test_client.get("/api/tasks?vault=TestVault&goal=A,B")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Task A" in task_ids
+    assert "Task B" in task_ids
+    assert "Task C" not in task_ids
+
+
+def test_list_tasks_goal_filter_mixed_form(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """GET /tasks?goal=A,B&goal=C returns tasks matching A, B, or C."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Task A", status="in_progress", goals=["A"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task B", status="in_progress", goals=["B"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task C", status="in_progress", goals=["C"]))
+    mock_vault_client._tasks.append(_make_task(task_id="Task D", status="in_progress", goals=["D"]))
+
+    response = test_client.get("/api/tasks?vault=TestVault&goal=A,B&goal=C")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Task A" in task_ids
+    assert "Task B" in task_ids
+    assert "Task C" in task_ids
+    assert "Task D" not in task_ids
+
+
+def test_list_tasks_goal_filter_absent_returns_all(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """GET /tasks without goal param returns all tasks regardless of goals field."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Task With Goals", status="in_progress", goals=["A"])
+    )
+    mock_vault_client._tasks.append(_make_task(task_id="Task No Goals", status="in_progress"))
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "Task With Goals" in task_ids
+    assert "Task No Goals" in task_ids
+
+
+def test_list_tasks_goal_response_field(
+    test_client: TestClient, mock_vault_client: MagicMock
+) -> None:
+    """TaskResponse includes a goals field: list of strings when present, null when absent."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(
+        _make_task(
+            task_id="Task With Goals", status="in_progress", goals=["Eliminate Agent Task Rot"]
+        )
+    )
+    mock_vault_client._tasks.append(_make_task(task_id="Task No Goals", status="in_progress"))
+
+    response = test_client.get("/api/tasks?vault=TestVault")
+
+    assert response.status_code == 200
+    tasks_by_id = {t["id"]: t for t in response.json()}
+
+    assert tasks_by_id["Task With Goals"]["goals"] == ["Eliminate Agent Task Rot"]
+    assert tasks_by_id["Task No Goals"]["goals"] is None
+
+
+def test_list_tasks_openapi_goal_param(test_client: TestClient) -> None:
+    """OpenAPI schema lists goal as an optional repeatable array parameter."""
+    response = test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    get_tasks_params = schema["paths"]["/api/tasks"]["get"]["parameters"]
+    goal_params = [p for p in get_tasks_params if p["name"] == "goal"]
+    assert len(goal_params) == 1, f"expected exactly one 'goal' parameter, got {len(goal_params)}"
+
+    goal_param = goal_params[0]
+    assert goal_param["in"] == "query"
+    assert goal_param.get("required", False) is False
+
+    param_schema = goal_param["schema"]
+    if "anyOf" in param_schema:
+        schema_types = [s.get("type") for s in param_schema["anyOf"]]
+        assert "array" in schema_types, f"anyOf should include array type, got {schema_types}"
+    else:
+        assert param_schema.get("type") == "array", f"expected array schema, got {param_schema}"
