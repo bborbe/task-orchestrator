@@ -3,6 +3,7 @@
 let currentVault = null; // null = "All", or vault name
 let currentAssignees = [];
 let currentStatuses = ['in_progress', 'completed']; // default — overridden by ?status= URL param
+const ALL_STATUSES = ['todo', 'in_progress', 'completed', 'hold', 'aborted']; // closed enum, fixed display order
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
 let startingTasks = new Set(); // Track tasks currently being started
@@ -73,6 +74,11 @@ function setupEventListeners() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeVaultDropdown();
     });
+    document.getElementById('status-selector-toggle').addEventListener('click', toggleStatusDropdown);
+    document.addEventListener('click', handleClickOutsideStatusDropdown);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeStatusDropdown();
+    });
     document.getElementById('refresh-btn').addEventListener('click', loadTasks);
     document.getElementById('copy-btn').addEventListener('click', copyCommand);
     document.getElementById('close-btn').addEventListener('click', closeModal);
@@ -93,6 +99,124 @@ function handleClickOutsideVaultDropdown(e) {
     const container = document.getElementById('vault-selector');
     if (container && !container.contains(e.target)) {
         closeVaultDropdown();
+    }
+}
+
+function toggleStatusDropdown() {
+    const dropdown = document.getElementById('status-selector-dropdown');
+    if (dropdown.classList.contains('hidden')) {
+        renderStatusDropdown();
+    }
+    dropdown.classList.toggle('hidden');
+}
+
+function closeStatusDropdown() {
+    const dropdown = document.getElementById('status-selector-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+}
+
+function handleClickOutsideStatusDropdown(e) {
+    const container = document.getElementById('status-selector');
+    if (container && !container.contains(e.target)) {
+        closeStatusDropdown();
+    }
+}
+
+function renderStatusDropdown() {
+    const dropdown = document.getElementById('status-selector-dropdown');
+    if (!dropdown) return;
+    dropdown.innerHTML = '';
+
+    const selectedSet = new Set(currentStatuses);
+    const allChecked = ALL_STATUSES.every(s => selectedSet.has(s));
+
+    // "All" checkbox row
+    const allItem = document.createElement('div');
+    allItem.className = 'status-selector-item' + (allChecked ? ' checked' : '');
+    allItem.innerHTML = `<input type="checkbox" id="status-cb-all" value="__all__" ${allChecked ? 'checked' : ''}><label for="status-cb-all">All</label>`;
+    allItem.querySelector('input').addEventListener('change', handleAllStatusCheckbox);
+    dropdown.appendChild(allItem);
+
+    // Separator
+    const sep = document.createElement('hr');
+    sep.className = 'status-selector-separator';
+    dropdown.appendChild(sep);
+
+    // One checkbox per status, in fixed enum order
+    ALL_STATUSES.forEach(status => {
+        const item = document.createElement('div');
+        const isChecked = selectedSet.has(status);
+        item.className = 'status-selector-item' + (isChecked ? ' checked' : '');
+        item.innerHTML = `<input type="checkbox" id="status-cb-${status}" value="${status}" ${isChecked ? 'checked' : ''}><label for="status-cb-${status}">${status}</label>`;
+        item.querySelector('input').addEventListener('change', handleStatusCheckboxChange);
+        dropdown.appendChild(item);
+    });
+}
+
+function handleAllStatusCheckbox() {
+    const dropdown = document.getElementById('status-selector-dropdown');
+    const checkboxes = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:not(#status-cb-all)'));
+    const allChecked = checkboxes.every(cb => cb.checked);
+
+    if (allChecked) {
+        // Uncheck everything → empty filter (backend default applies)
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            cb.closest('.status-selector-item').classList.remove('checked');
+        });
+        const allCb = document.getElementById('status-cb-all');
+        allCb.checked = false;
+        allCb.closest('.status-selector-item').classList.remove('checked');
+        currentStatuses = [];
+    } else {
+        // Check everything
+        checkboxes.forEach(cb => {
+            cb.checked = true;
+            cb.closest('.status-selector-item').classList.add('checked');
+        });
+        const allCb = document.getElementById('status-cb-all');
+        allCb.checked = true;
+        allCb.closest('.status-selector-item').classList.add('checked');
+        currentStatuses = [...ALL_STATUSES];
+    }
+
+    updateStatusLabel();
+    updateURL();
+    loadTasks();
+}
+
+function handleStatusCheckboxChange(e) {
+    const dropdown = document.getElementById('status-selector-dropdown');
+    const checkboxes = Array.from(dropdown.querySelectorAll('input[type="checkbox"]:not(#status-cb-all)'));
+
+    e.target.closest('.status-selector-item').classList.toggle('checked', e.target.checked);
+
+    // Rebuild currentStatuses from checked boxes, preserving the fixed enum order from ALL_STATUSES.
+    const checkedSet = new Set(checkboxes.filter(cb => cb.checked).map(cb => cb.value));
+    currentStatuses = ALL_STATUSES.filter(s => checkedSet.has(s));
+
+    // Sync the "All" checkbox visual state
+    const allCb = document.getElementById('status-cb-all');
+    const everythingChecked = currentStatuses.length === ALL_STATUSES.length;
+    allCb.checked = everythingChecked;
+    allCb.closest('.status-selector-item').classList.toggle('checked', everythingChecked);
+
+    updateStatusLabel();
+    updateURL();
+    loadTasks();
+}
+
+function updateStatusLabel() {
+    const label = document.getElementById('status-selector-label');
+    if (!label) return;
+
+    if (currentStatuses.length === 0) {
+        label.textContent = 'None';
+    } else if (currentStatuses.length === ALL_STATUSES.length) {
+        label.textContent = 'All';
+    } else {
+        const text = currentStatuses.join(', ');
+        label.textContent = text.length > 30 ? text.slice(0, 30) + '...' : text;
     }
 }
 
@@ -187,6 +311,7 @@ async function loadVaults() {
         });
 
         updateVaultLabel();
+        updateStatusLabel();
 
         // Load tasks
         await loadTasks();
