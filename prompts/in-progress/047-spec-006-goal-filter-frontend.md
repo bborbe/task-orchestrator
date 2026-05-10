@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [006-goal-filter-on-tasks-endpoint]
+summary: Added currentGoals array to app.js with parse in parseURLParams, emit in updateURL, and forward in loadTasks — goal URL parameter now round-trips end-to-end; bumped CHANGELOG to v0.29.0.
+container: task-orchestrator-047-spec-006-goal-filter-frontend
+dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T21:38:00Z"
 queued: "2026-05-10T21:49:50Z"
+started: "2026-05-10T21:52:16Z"
 branch: dark-factory/goal-filter-on-tasks-endpoint
 ---
 

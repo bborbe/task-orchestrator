@@ -3,6 +3,7 @@
 let currentVault = null; // null = "All", or vault name
 let currentAssignees = [];
 let currentStatuses = ['in_progress', 'completed']; // default — overridden by ?status= URL param
+let currentGoals = []; // goal filter from URL — empty means no filter
 const ALL_STATUSES = ['todo', 'in_progress', 'completed', 'hold', 'aborted']; // closed enum, fixed display order
 let tasksCache = {}; // Map of task ID -> task data
 let ws = null; // WebSocket connection
@@ -66,6 +67,9 @@ function parseURLParams() {
     if (statusParams.length > 0) {
         currentStatuses = statusParams;
     }
+
+    // Parse goal parameter(s) — supports repeated form (?goal=A&goal=B)
+    currentGoals = params.getAll('goal');
 }
 
 function setupEventListeners() {
@@ -470,6 +474,9 @@ function updateURL() {
         currentStatuses.forEach(s => params.append('status', s));
     }
 
+    // Add goal parameter(s) — emit one repeated param per value
+    currentGoals.forEach(g => params.append('goal', g));
+
     // Update URL without reload
     const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newURL);
@@ -549,6 +556,9 @@ async function loadTasks() {
 
         // Add assignee parameter(s) — pass through every value the user selected
         currentAssignees.forEach(a => params.append('assignee', a));
+
+        // Add goal parameter(s) — pass through every value from the URL
+        currentGoals.forEach(g => params.append('goal', g));
 
         // Fetch tasks
         const response = await fetch(`/api/tasks?${params.toString()}`);

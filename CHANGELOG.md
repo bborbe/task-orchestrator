@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.29.0
+
+- feat: Frontend reads goal filter from URL — ?goal= param round-trips end-to-end (parse on load, forward to /api/tasks, preserve through updateURL writebacks); URL-driven only, no new UI controls
+
 ## v0.28.0
 
 - feat: Add goal filter to GET /tasks — new goals field on TaskResponse (wiki-link brackets stripped at parse time), goal query param accepts repeated and comma-separated forms, filters by set membership with OR semantics
