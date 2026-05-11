@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-08T11:38:22Z"
 generating: "2026-05-08T11:38:57Z"
 prompted: "2026-05-08T11:45:40Z"
 verifying: "2026-05-08T11:58:36Z"
+completed: "2026-05-11T15:33:42Z"
 branch: dark-factory/goal-session-resolution
 ---
 
@@ -102,3 +103,16 @@ Manual smoke:
 ## Do-Nothing Option
 
 Users continue setting human-readable session IDs on goals, but the value never resolves. Workaround: paste the UUID manually after each rename. Annoying and error-prone, especially with the goal+task hierarchy where the same name is used in multiple places.
+
+## Verification Result
+
+**Verified:** 2026-05-11T15:32:54Z (HEAD cfeac09)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.156.1-1-g04f3863-dirty)
+**Scenario:** Live e2e against running task-orch (pid 58549, v0.30.0 incl. v0.20.x goal cleanup); set non-UUID `claude_session_id=df-spec-004-verify` on real goal `Eliminate Agent Task Rot` via `vault-cli goal set --vault personal`; observed real `vault-cli goal clear` subprocess clear the field; ran full `make precommit` (149 tests).
+**Evidence:**
+- Set 15:30:13Z → cleared by 15:32:31Z (≤ 300s cleanup window) — verified by reading goal file frontmatter directly
+- `tests/test_cleanup.py` 17/17 PASSED incl. 6 goal-specific: `test_goal_display_name_resolved_to_uuid`, `test_goal_uuid_cleared_on_missing_file`, `test_goal_cleared_on_assignee_mismatch`, `test_goal_set_error_path_no_clear`, `test_goal_list_failure_does_not_abort_task_pass`, `test_goal_list_missing_directory_logs_debug_not_error`
+- `make precommit`: 149 tests passed, ruff clean, mypy clean
+- `cleanup.py:118-260` ships the goal-cleanup branch (`[Cleanup] ... goal %s` log prefixes); resolution helper `resolve_session_id` shared with task path (cleanup.py:138)
+- CHANGELOG entries `v0.20.0` (feat) and `v0.20.1` (fix: goals-dir-missing debug downgrade) present
+**Verdict:** PASS
