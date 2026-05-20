@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.23.0
+## v0.33.0
 
 - feat: Accept status alias `next` alongside `todo` in default filter and `?status=next` queries; accept phase alias `execution` alongside `in_progress` in `?phase=execution` queries and valid-phase list — both old and new canonical values are first-class forever
 
