@@ -1,4 +1,4 @@
-autoRelease: true
+autoRelease: false
 validationPrompt: docs/dod.md
 workflow: direct
 extraMounts:
