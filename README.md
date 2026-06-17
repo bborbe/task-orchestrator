@@ -1,5 +1,8 @@
 # Task Orchestrator
 
+[![CI](https://github.com/bborbe/task-orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/task-orchestrator/actions/workflows/ci.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/bborbe/task-orchestrator)
+
 Orchestrate Claude Code sessions from Obsidian tasks.
 
 ## Where this fits in the bigger picture
