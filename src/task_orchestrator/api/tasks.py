@@ -35,6 +35,8 @@ router = APIRouter()
 
 # Per-vault unfiltered task cache, keyed on the vault tasks-directory mtime.
 # Single slot per vault; in-process only; empty at startup; dies with the process.
+# Concurrent misses on the same vault can both write; outcome is idempotent
+# (same key, same value) so the race is benign.
 _vault_task_cache: dict[str, tuple[float, list[Task]]] = {}
 
 # Global connection manager (injected via set_connection_manager)
