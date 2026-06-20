@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from task_orchestrator.api.models import AssigneesResponse, SessionResponse, Task, TaskResponse
@@ -32,12 +32,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Per-vault unfiltered task cache, keyed on the vault tasks-directory mtime.
-# Single slot per vault; in-process only; empty at startup; dies with the process.
-# Concurrent misses on the same vault can both write; outcome is idempotent
-# (same key, same value) so the race is benign.
-_vault_task_cache: dict[str, tuple[float, list[Task]]] = {}
 
 # Global connection manager (injected via set_connection_manager)
 _connection_manager: "ConnectionManager | None" = None
@@ -215,6 +209,7 @@ async def _process_vault(
     now: datetime,
     cutoff: datetime,
     lookback: datetime,
+    vault_task_cache: dict[str, tuple[float, list[Task]]],
 ) -> list[TaskResponse]:
     client = get_vault_cli_client_for_vault(vault_name)
     vault_config = get_vault_config(vault_name)
@@ -232,13 +227,15 @@ async def _process_vault(
     except OSError:
         current_mtime = None
 
-    cached = _vault_task_cache.get(vault_name)
+    # Concurrent misses on the same vault can both write; outcome is idempotent
+    # (same key, same value) so the race is benign.
+    cached = vault_task_cache.get(vault_name)
     if current_mtime is not None and cached is not None and cached[0] == current_mtime:
         raw_tasks = list(cached[1])  # cache hit — no subprocess
     else:
         raw_tasks = await client.list_tasks(show_all=True, status_filter=effective_status_filter)
         if current_mtime is not None:
-            _vault_task_cache[vault_name] = (current_mtime, list(raw_tasks))
+            vault_task_cache[vault_name] = (current_mtime, list(raw_tasks))
 
     # Apply the status filter in Python over the unfiltered cached list
     tasks = [t for t in raw_tasks if t.status in effective_status_filter]
@@ -337,6 +334,7 @@ async def _process_vault(
 
 @router.get("/tasks", response_model=list[TaskResponse])
 async def list_tasks(
+    request: Request,
     vault: Annotated[list[str] | None, Query()] = None,
     status: Annotated[list[str] | None, Query()] = None,
     phase: Annotated[list[str] | None, Query()] = None,
@@ -368,6 +366,7 @@ async def list_tasks(
     cutoff = now + timedelta(hours=8)
     lookback = now - timedelta(hours=8)
 
+    vault_task_cache: dict[str, tuple[float, list[Task]]] = request.app.state.vault_task_cache
     results = await asyncio.gather(
         *[
             _process_vault(
@@ -379,6 +378,7 @@ async def list_tasks(
                 now,
                 cutoff,
                 lookback,
+                vault_task_cache,
             )
             for vault_name in vault_names
         ],

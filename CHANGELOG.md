@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - perf: Replace serial per-vault loop in GET /api/tasks with asyncio.gather concurrent fan-out; warm p50 drops from 270-330 ms to single-vault dominated latency
 - perf: Add per-vault mtime-keyed in-process cache to GET /api/tasks; cache hit skips the vault-cli subprocess and invalidates automatically when a task file is created, modified, or deleted
+- refactor: Move per-vault task cache from module global to FastAPI app.state for constructor-injection; tests no longer reach into module private names
 
 ## v0.34.1
 
