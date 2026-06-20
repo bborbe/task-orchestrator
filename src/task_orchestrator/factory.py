@@ -298,6 +298,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Per-vault mtime-keyed task cache; in-process only; dies with the process.
+    app.state.vault_task_cache = {}
+
     # Mount API routes
     app.include_router(tasks_router, prefix="/api")
     app.include_router(ws_router)  # WebSocket at /ws

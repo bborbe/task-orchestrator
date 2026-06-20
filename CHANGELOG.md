@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- perf: Replace serial per-vault loop in GET /api/tasks with asyncio.gather concurrent fan-out; warm p50 drops from 270-330 ms to single-vault dominated latency
+- perf: Add per-vault mtime-keyed in-process cache to GET /api/tasks; cache hit skips the vault-cli subprocess and invalidates automatically when a task file is created, modified, or deleted
+- refactor: Move per-vault task cache from module global to FastAPI app.state for constructor-injection; tests no longer reach into module private names
+- fix: Drop status_filter kwarg from cache-miss list_tasks call to make the cache contract explicit (stores unfiltered raw list); closes pr-reviewer cache-key-missing-status-filter finding on PR #6
+- fix: Narrow asyncio.gather result re-raise from BaseException to RuntimeError so KeyboardInterrupt / SystemExit / CancelledError do not accidentally surface through GET /api/tasks
+
 ## v0.34.1
 
 - fix: `derive_claude_project_dir` now encodes `session_project_dir` to `~/.claude/projects/<encoded>` instead of returning it as-is. Previous behavior treated the obsidian vault path (e.g. `~/Documents/Obsidian/Personal`) as the claude project dir, so every cleanup pass cleared valid UUIDs in family/openclaw/trading tasks and the watcher resolver could never find a matching session.

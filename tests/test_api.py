@@ -1,5 +1,6 @@
 """Tests for API endpoints."""
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -961,13 +962,20 @@ def test_list_tasks_no_defer_date_unaffected(
 def test_list_tasks_default_status_filter_includes_completed(
     test_client: TestClient, mock_vault_client: MagicMock
 ) -> None:
-    """When no status query param is given, list_tasks uses todo+next+in_progress+completed."""
-    test_client.get("/api/tasks?vault=TestVault")
+    """When no status query param is given, completed tasks are included in the response."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Todo Task", status="todo"))
+    mock_vault_client._tasks.append(_make_task(task_id="Next Task", status="next"))
+    mock_vault_client._tasks.append(_make_task(task_id="InProgress Task", status="in_progress"))
+    recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    mock_vault_client._tasks.append(
+        _make_task(task_id="Completed Task", status="completed", completed_date=recent)
+    )
 
-    call_args = mock_vault_client.list_tasks.call_args
-    assert call_args is not None
-    effective = call_args.kwargs.get("status_filter") or call_args.args[0]
-    assert set(effective) == {"todo", "next", "in_progress", "completed"}
+    response = test_client.get("/api/tasks?vault=TestVault")
+    assert response.status_code == 200
+    task_ids = {t["id"] for t in response.json()}
+    assert {"Todo Task", "Next Task", "InProgress Task", "Completed Task"}.issubset(task_ids)
 
 
 def test_list_tasks_recent_completed_date_is_visible(
@@ -1173,13 +1181,17 @@ def test_list_tasks_status_mixed_form(
 def test_list_tasks_status_all_empty_uses_default(
     test_client: TestClient, mock_vault_client: MagicMock
 ) -> None:
-    """GET /tasks?status= behaves as if omitted (default todo+next+in_progress+completed)."""
-    test_client.get("/api/tasks?vault=TestVault&status=")
+    """GET /tasks?status= behaves as if status were omitted (default filter applies)."""
+    mock_vault_client._tasks.clear()
+    mock_vault_client._tasks.append(_make_task(task_id="Todo Task", status="todo"))
+    mock_vault_client._tasks.append(_make_task(task_id="Next Task", status="next"))
 
-    call_args = mock_vault_client.list_tasks.call_args
-    assert call_args is not None
-    effective = call_args.kwargs["status_filter"]
-    assert set(effective) == {"todo", "next", "in_progress", "completed"}
+    response_empty = test_client.get("/api/tasks?vault=TestVault&status=")
+    response_omit = test_client.get("/api/tasks?vault=TestVault")
+
+    assert response_empty.status_code == 200
+    assert response_omit.status_code == 200
+    assert {t["id"] for t in response_empty.json()} == {t["id"] for t in response_omit.json()}
 
 
 def test_list_tasks_status_whitespace_trimmed(
@@ -2209,3 +2221,370 @@ def test_new_canonical_task_visible_and_patchable(
         )
 
     assert patch_response.status_code == 200
+
+
+def test_list_tasks_concurrent_overlap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-vault list_tasks calls overlap in time, proving concurrent fan-out."""
+    import asyncio
+    import time
+
+    vault1 = tmp_path / "v1"
+    vault2 = tmp_path / "v2"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+            VaultConfig(name="V2", vault_path=str(vault2), vault_name="V2", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    call_times: dict[str, tuple[float, float]] = {}
+
+    def make_client(name: str) -> MagicMock:
+        client = MagicMock()
+
+        async def list_tasks(**kwargs):
+            start = time.monotonic()
+            await asyncio.sleep(0.05)
+            call_times[name] = (start, time.monotonic())
+            return []
+
+        client.list_tasks = list_tasks
+        return client
+
+    clients = {"V1": make_client("V1"), "V2": make_client("V2")}
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vn: clients[vn],
+    ):
+        response = http_client.get("/api/tasks")
+
+    assert response.status_code == 200
+    assert "V1" in call_times and "V2" in call_times
+    # Concurrent: one vault's start is before the other vault's end
+    assert call_times["V2"][0] < call_times["V1"][1] or call_times["V1"][0] < call_times["V2"][1]
+
+
+def test_list_tasks_concurrent_preserves_vault_major_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """asyncio.gather result order matches vault_names order (vault-major)."""
+    vault1 = tmp_path / "v1"
+    vault2 = tmp_path / "v2"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+            VaultConfig(name="V2", vault_path=str(vault2), vault_name="V2", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task1 = _make_task(task_id="V1Task", status="in_progress")
+    task2 = _make_task(task_id="V2Task", status="in_progress")
+    clients = {
+        "V1": _make_vault_client([task1]),
+        "V2": _make_vault_client([task2]),
+    }
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vn: clients[vn],
+    ):
+        response = http_client.get("/api/tasks")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert task_ids.index("V1Task") < task_ids.index("V2Task")
+
+
+def test_list_tasks_concurrent_skips_value_error_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ValueError from get_vault_cli_client_for_vault skips that vault; siblings return."""
+    vault1 = tmp_path / "v1"
+    vault2 = tmp_path / "v2"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+            VaultConfig(name="V2", vault_path=str(vault2), vault_name="V2", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task2 = _make_task(task_id="SiblingTask", status="in_progress")
+
+    def get_client(vault_name: str) -> MagicMock:
+        if vault_name == "V1":
+            raise ValueError("Unknown vault: V1")
+        return _make_vault_client([task2])
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=get_client,
+    ):
+        response = http_client.get("/api/tasks")
+
+    assert response.status_code == 200
+    task_ids = [t["id"] for t in response.json()]
+    assert "SiblingTask" in task_ids
+
+
+def test_list_tasks_concurrent_runtime_error_returns_500(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RuntimeError from list_tasks propagates and returns HTTP 500."""
+    vault1 = tmp_path / "v1"
+    vault2 = tmp_path / "v2"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+            VaultConfig(name="V2", vault_path=str(vault2), vault_name="V2", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    bad_client = MagicMock()
+    bad_client.list_tasks = AsyncMock(side_effect=RuntimeError("vault-cli exited 1"))
+    good_client = _make_vault_client([_make_task(task_id="GoodTask", status="in_progress")])
+
+    def get_client(vault_name: str) -> MagicMock:
+        return bad_client if vault_name == "V1" else good_client
+
+    app = create_app()
+    http_client = TestClient(app, raise_server_exceptions=False)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=get_client,
+    ):
+        response = http_client.get("/api/tasks")
+
+    assert response.status_code == 500
+
+
+def test_list_tasks_concurrent_response_matches_sequential_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Response for two-vault request matches deterministic fixture."""
+    vault1 = tmp_path / "v1"
+    vault2 = tmp_path / "v2"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+            VaultConfig(name="V2", vault_path=str(vault2), vault_name="V2", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task1 = _make_task(task_id="FixtureV1Task", status="in_progress", phase="planning")
+    task2 = _make_task(task_id="FixtureV2Task", status="in_progress", phase="execution")
+    clients = {
+        "V1": _make_vault_client([task1]),
+        "V2": _make_vault_client([task2]),
+    }
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vn: clients[vn],
+    ):
+        response = http_client.get("/api/tasks?status=in_progress")
+
+    assert response.status_code == 200
+    tasks = response.json()
+    task_ids = [t["id"] for t in tasks]
+    assert task_ids == ["FixtureV1Task", "FixtureV2Task"]
+    assert all(t["status"] == "in_progress" for t in tasks)
+
+
+# --- cache tests ---
+
+
+def test_list_tasks_cache_hit_skips_subprocess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cache hit: unchanged tasks-dir mtime means subprocess runs only once."""
+    vault1 = tmp_path / "v1"
+    tasks_dir = vault1 / "Tasks"
+    tasks_dir.mkdir(parents=True)
+
+    # Pin the mtime so it cannot drift between the two requests.
+    fixed_mtime = 1_000_000.0
+    os.utime(tasks_dir, (fixed_mtime, fixed_mtime))
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task1 = _make_task(task_id="CacheTask", status="in_progress")
+    client = MagicMock()
+    client.list_tasks = AsyncMock(return_value=[task1])
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        return_value=client,
+    ):
+        response1 = http_client.get("/api/tasks")
+        response2 = http_client.get("/api/tasks")
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert client.list_tasks.await_count == 1  # second request served from cache
+
+
+def test_list_tasks_cache_miss_on_mtime_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bumping the tasks-dir mtime invalidates the cache; subprocess runs twice."""
+    vault1 = tmp_path / "v1"
+    tasks_dir = vault1 / "Tasks"
+    tasks_dir.mkdir(parents=True)
+
+    first_mtime = 1_000_000.0
+    os.utime(tasks_dir, (first_mtime, first_mtime))
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task1 = _make_task(task_id="MtimeTask", status="in_progress")
+    client = MagicMock()
+    client.list_tasks = AsyncMock(return_value=[task1])
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        return_value=client,
+    ):
+        response1 = http_client.get("/api/tasks")
+
+        # Bump the mtime to simulate a task file change.
+        newer_mtime = first_mtime + 1.0
+        os.utime(tasks_dir, (newer_mtime, newer_mtime))
+
+        response2 = http_client.get("/api/tasks")
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert client.list_tasks.await_count == 2  # mtime change caused cache miss
+
+
+def test_list_tasks_missing_tasks_dir_is_cache_miss(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing tasks directory is treated as cache miss; subprocess runs and response is 200."""
+    vault1 = tmp_path / "v1"
+    # Intentionally do NOT create vault1 / "Tasks"
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    task1 = _make_task(task_id="NoDirTask", status="in_progress")
+    client = MagicMock()
+    client.list_tasks = AsyncMock(return_value=[task1])
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        return_value=client,
+    ):
+        response = http_client.get("/api/tasks")
+
+    assert response.status_code == 200
+    assert client.list_tasks.await_count == 1  # subprocess ran (missing dir = cache miss)
+
+
+def test_list_tasks_cache_does_not_leak_filtered_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cache stores unfiltered raw tasks; a different status filter on the next request
+    must apply against the full cached set, not against a previously-filtered subset.
+    Regression for PR #6 review (cache-key-missing-status-filter)."""
+    vault1 = tmp_path / "v1"
+    (vault1 / "Tasks").mkdir(parents=True)
+
+    test_config = Config(
+        vaults=[
+            VaultConfig(name="V1", vault_path=str(vault1), vault_name="V1", tasks_folder="Tasks"),
+        ],
+        host="127.0.0.1",
+        port=8000,
+    )
+    monkeypatch.setattr("task_orchestrator.factory._config", test_config)
+
+    todo_task = _make_task(task_id="A Todo", status="todo")
+    recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    completed_task = _make_task(task_id="A Completed", status="completed", completed_date=recent)
+
+    client = MagicMock()
+    client.list_tasks = AsyncMock(return_value=[todo_task, completed_task])
+
+    app = create_app()
+    http_client = TestClient(app)
+
+    with patch(
+        "task_orchestrator.api.tasks.get_vault_cli_client_for_vault",
+        side_effect=lambda vn: client,
+    ):
+        # Request A — narrow filter
+        resp_a = http_client.get("/api/tasks?vault=V1&status=todo")
+        # Request B — default filter (no ?status= query)
+        resp_b = http_client.get("/api/tasks?vault=V1")
+
+    assert resp_a.status_code == 200
+    assert resp_b.status_code == 200
+    a_ids = {t["id"] for t in resp_a.json()}
+    b_ids = {t["id"] for t in resp_b.json()}
+    assert a_ids == {"A Todo"}  # request A filtered to just todo
+    assert "A Completed" in b_ids  # request B sees completed (cache stored unfiltered)
+    assert "A Todo" in b_ids
+    assert client.list_tasks.await_count == 1  # request B served from cache
