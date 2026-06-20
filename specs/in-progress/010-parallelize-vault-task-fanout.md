@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-20T12:49:47Z"
 generating: "2026-06-20T12:50:19Z"
 prompted: "2026-06-20T13:02:39Z"
+verifying: "2026-06-20T13:23:28Z"
 branch: dark-factory/parallelize-vault-task-fanout
 ---
 
