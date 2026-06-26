@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-06-26T13:19:52Z"
 generating: "2026-06-26T13:28:52Z"
 prompted: "2026-06-26T13:28:52Z"
 verifying: "2026-06-26T13:55:06Z"
+completed: "2026-06-26T14:15:32Z"
 branch: dark-factory/add-log-level-env-var-and-stream-vault-cli-subprocess
 ---
 
