@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from task_orchestrator.api.models import Task
+from task_orchestrator.api.models import Goal, Task
 from task_orchestrator.cleanup import derive_claude_project_dir, run_cleanup_loop
 from task_orchestrator.config import Config, VaultConfig, load_config
 from task_orchestrator.status_cache import StatusCache
@@ -158,7 +158,10 @@ async def _try_resolve_goal_session(
         logger.debug("[Factory] Could not resolve session for goal %s: %s", goal_id, e)
 
 
-def start_task_watchers(vault_task_cache: dict[str, tuple[float, list[Task]]]) -> None:
+def start_task_watchers(
+    vault_task_cache: dict[str, tuple[float, list[Task]]],
+    vault_goal_cache: dict[str, tuple[float, list[Goal]]],
+) -> None:
     """Start vault-cli watchers for all vaults.
 
     The vault_task_cache (from app.state) is invalidated per-vault on every
@@ -166,6 +169,8 @@ def start_task_watchers(vault_task_cache: dict[str, tuple[float, list[Task]]]) -
     drag-and-drop phase changes). Tasks-directory mtime alone does not detect
     such edits, so the watcher's event stream is the canonical "something
     changed" signal.
+
+    The vault_goal_cache follows the same invalidation pattern for /api/goals.
     """
     global _watchers, _watcher_tasks
     config = get_config()
@@ -199,6 +204,13 @@ def start_task_watchers(vault_task_cache: dict[str, tuple[float, list[Task]]]) -
                     # alone cannot detect frontmatter edits — the watcher event is
                     # the authoritative trigger.
                     vault_task_cache.pop(vault_arg, None)
+
+                    # Invalidate the per-vault goal list cache so the next
+                    # /api/goals request observes the change. Goals live under
+                    # any *Goals folder; the directory-mtime cache key alone
+                    # cannot detect frontmatter edits, so the watcher event is
+                    # the authoritative trigger.
+                    vault_goal_cache.pop(vault_arg, None)
 
                     # Broadcast to UI clients (unconditional — the WebSocket message
                     # "type" field is the vault-cli event "event" type, NOT the new
@@ -284,7 +296,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         cache.load_vault(vault.name, vault_path, vault.tasks_folder)
 
     logger.info("[Lifespan] Starting task watchers...")
-    start_task_watchers(app.state.vault_task_cache)
+    start_task_watchers(app.state.vault_task_cache, app.state.vault_goal_cache)
 
     logger.info("[Lifespan] Starting cleanup loop...")
     _cleanup_task = asyncio.create_task(run_cleanup_loop(config))
@@ -315,6 +327,9 @@ def create_app() -> FastAPI:
 
     # Per-vault mtime-keyed task cache; in-process only; dies with the process.
     app.state.vault_task_cache = {}
+    # Per-vault mtime-keyed goal cache; invalidated by the watcher
+    # alongside the task cache (see start_task_watchers).
+    app.state.vault_goal_cache = {}
 
     # Mount API routes
     app.include_router(tasks_router, prefix="/api")
