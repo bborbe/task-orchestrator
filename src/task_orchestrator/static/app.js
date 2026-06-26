@@ -1721,8 +1721,15 @@ function connectWebSocket() {
 function handleTaskUpdate(data) {
     const { type, task_id, vault, item_kind } = data;
     // Pre-prompt-3 payloads have no item_kind; default to "task" so
-    // pre-existing event types (task_updated etc.) keep working.
-    const kind = item_kind || 'task';
+    // pre-existing event types (task_updated etc.) keep working during
+    // the deploy window. With prompt 3 shipped, every payload from the
+    // running orchestrator carries item_kind; warn once if we see a
+    // payload that omits it (likely a pre-prompt-3 backend in flight).
+    let kind = item_kind;
+    if (!kind) {
+        console.warn('WebSocket payload missing item_kind; defaulting to "task" (pre-prompt-3 backend?)');
+        kind = 'task';
+    }
 
     // Check if update is for a vault we're displaying
     const shouldUpdate = currentVault === null ||

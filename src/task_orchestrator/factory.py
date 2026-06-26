@@ -198,24 +198,37 @@ def start_task_watchers(
                     # invalidate a downstream task that lists this item as a blocker)
                     cache.invalidate(vault_arg, item_id)
 
-                    # Invalidate the per-vault task list cache so the next /api/tasks
-                    # request observes the change. Directory mtime is unchanged on
-                    # in-place file writes (POSIX), so the directory-mtime cache key
-                    # alone cannot detect frontmatter edits — the watcher event is
-                    # the authoritative trigger.
-                    vault_task_cache.pop(vault_arg, None)
+                    # Kind-scoped cache invalidation (spec 013 AC#9):
+                    # only the cache matching the event's kind is touched.
+                    # The other view's cache stays so the inactive view
+                    # does NOT re-fetch on every event.
+                    if item_kind == "task":
+                        # Invalidate the per-vault task list cache so the next /api/tasks
+                        # request observes the change. Directory mtime is unchanged on
+                        # in-place file writes (POSIX), so the directory-mtime cache key
+                        # alone cannot detect frontmatter edits — the watcher event is
+                        # the authoritative trigger.
+                        vault_task_cache.pop(vault_arg, None)
+                    elif item_kind == "goal":
+                        # Invalidate the per-vault goal list cache so the next
+                        # /api/goals request observes the change. Goals live under
+                        # any *Goals folder; the directory-mtime cache key alone
+                        # cannot detect frontmatter edits, so the watcher event is
+                        # the authoritative trigger.
+                        vault_goal_cache.pop(vault_arg, None)
+                    # theme / objective / empty kind: no cache to invalidate
 
-                    # Invalidate the per-vault goal list cache so the next
-                    # /api/goals request observes the change. Goals live under
-                    # any *Goals folder; the directory-mtime cache key alone
-                    # cannot detect frontmatter edits, so the watcher event is
-                    # the authoritative trigger.
-                    vault_goal_cache.pop(vault_arg, None)
-
-                    # Broadcast to UI clients (unconditional — the WebSocket message
-                    # "type" field is the vault-cli event "event" type, NOT the new
-                    # item_kind. Payload shape unchanged for backward compatibility.)
-                    message = {"type": event_type, "task_id": item_id, "vault": vault_arg}
+                    # Broadcast to UI clients. item_kind is added (spec 013 prompt 3)
+                    # so the frontend routes the event to the active view's cache
+                    # (loadTasks for "task", loadGoals for "goal") and avoids
+                    # re-fetching the inactive view. All pre-existing fields
+                    # (type, task_id, vault) are unchanged.
+                    message = {
+                        "type": event_type,
+                        "task_id": item_id,
+                        "vault": vault_arg,
+                        "item_kind": item_kind,
+                    }
                     asyncio.run_coroutine_threadsafe(connection_manager.broadcast(message), loop)
 
                     # Dispatch session resolution based on the file's kind

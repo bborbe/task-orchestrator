@@ -748,7 +748,9 @@ async def execute_slash_command(
                 raise HTTPException(status_code=500, detail=stderr.decode())
 
             if _connection_manager:
-                await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
+                await _connection_manager.broadcast(
+                    {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+                )
 
             command_str = " ".join(vault_cli_args)
             logger.info(f"vault-cli fast path completed: {command_str}")
@@ -837,7 +839,9 @@ async def assign_task_to_me(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     if _connection_manager:
-        await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
+        await _connection_manager.broadcast(
+            {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+        )
 
     return {"status": "success", "task_id": task_id, "assignee": current_user}
 
@@ -901,7 +905,9 @@ async def update_task_phase(
             raise HTTPException(status_code=500, detail=stderr.decode())
 
         if _connection_manager:
-            await _connection_manager.broadcast({"type": "task_updated", "task_id": task_id})
+            await _connection_manager.broadcast(
+                {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+            )
 
         return {"status": "success", "task_id": task_id, "phase": request.phase}
     except HTTPException:

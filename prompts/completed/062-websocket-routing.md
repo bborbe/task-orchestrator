@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added item_kind to all WebSocket broadcast payloads (factory.py watcher callback + 3 explicit api/tasks.py sites) and made cache invalidation kind-scoped so task events don't invalidate the goal cache and vice versa; 6 new tests in tests/test_websocket_routing.py cover AC#9 no-cross-rerender invariant.
+execution_id: task-orchestrator-goals-view-exec-062-websocket-routing
+dark-factory-version: v0.187.5
 created: "2026-06-26T16:18:50Z"
 queued: "2026-06-26T16:18:59Z"
+started: "2026-06-26T16:33:21Z"
+completed: "2026-06-26T16:37:18Z"
 ---
 ---
 status: draft

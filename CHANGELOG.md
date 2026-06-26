@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.40.0
+
+- feat: WebSocket payload now carries `item_kind: "task" | "goal"` on every broadcast — vault-cli watcher callback (which already received the kind from `vault_cli watch --types`) propagates it into the message dict, and the three explicit `broadcast` call sites in `api/tasks.py` (defer/complete fast path, assign-to-me, update phase) carry `"task"`. The frontend `handleTaskUpdate` reads the field and routes to the active view's cache only. Cache invalidation in the watcher callback is now kind-scoped: task events touch only `vault_task_cache`; goal events touch only `vault_goal_cache` — the inactive view does NOT re-fetch on every event (spec AC#9 invariant).
+
 ## v0.39.0
 
 - feat: Add Tasks/Goals view toggle to the board — top-of-board control switches between the existing Tasks view and a new Goals view that renders goal cards in the same status columns. Active view encoded in URL as `?view=tasks` / `?view=goals`; deep-linking to `?view=goals` lands in the Goals view without first firing `/api/tasks` (single in-flight fetch). Goal cards are read-only (no Start/Resume button, no drag), reusing the existing task-card rendering path and the same `obsidian://` URL encoding. Per-view caches ensure editing a goal does NOT re-fetch tasks and vice versa.
