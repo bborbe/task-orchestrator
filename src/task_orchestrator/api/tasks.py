@@ -10,7 +10,7 @@ import shlex
 from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -191,6 +191,18 @@ class UpdatePhaseRequest(BaseModel):
     """Request model for updating task phase."""
 
     phase: str
+
+
+class UpdateStatusRequest(BaseModel):
+    """Request model for updating an item's status (currently used for goals via drag-and-drop).
+
+    Allowlist matches the canonical status enum (see Personal-vault CLAUDE.md
+    `Task status semantics`). Pydantic rejects any other value with HTTP 422
+    before it can reach vault-cli — prevents a frontend typo from writing
+    garbage into goal frontmatter.
+    """
+
+    status: Literal["next", "in_progress", "backlog", "completed", "hold", "aborted"]
 
 
 class UpdateSessionRequest(BaseModel):
@@ -749,7 +761,12 @@ async def execute_slash_command(
 
             if _connection_manager:
                 await _connection_manager.broadcast(
-                    {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+                    {
+                        "type": "task_updated",
+                        "task_id": task_id,
+                        "item_kind": "task",
+                        "vault": vault,
+                    }
                 )
 
             command_str = " ".join(vault_cli_args)
@@ -840,7 +857,7 @@ async def assign_task_to_me(
 
     if _connection_manager:
         await _connection_manager.broadcast(
-            {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+            {"type": "task_updated", "task_id": task_id, "item_kind": "task", "vault": vault}
         )
 
     return {"status": "success", "task_id": task_id, "assignee": current_user}
@@ -880,7 +897,15 @@ async def update_task_phase(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _stdout, stderr = await proc.communicate()
+        # 10s timeout — same rationale as update_goal_status below.
+        try:
+            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except TimeoutError as e:
+            with suppress(ProcessLookupError):
+                proc.kill()
+            raise HTTPException(
+                status_code=504, detail="vault-cli task set (phase) timed out after 10s"
+            ) from e
 
         if proc.returncode != 0:
             raise HTTPException(status_code=500, detail=stderr.decode())
@@ -899,17 +924,92 @@ async def update_task_phase(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _stdout, stderr = await status_proc.communicate()
+        try:
+            _stdout, stderr = await asyncio.wait_for(status_proc.communicate(), timeout=10.0)
+        except TimeoutError as e:
+            with suppress(ProcessLookupError):
+                status_proc.kill()
+            raise HTTPException(
+                status_code=504, detail="vault-cli task set (status) timed out after 10s"
+            ) from e
 
         if status_proc.returncode != 0:
             raise HTTPException(status_code=500, detail=stderr.decode())
 
         if _connection_manager:
             await _connection_manager.broadcast(
-                {"type": "task_updated", "task_id": task_id, "item_kind": "task"}
+                {"type": "task_updated", "task_id": task_id, "item_kind": "task", "vault": vault}
             )
 
         return {"status": "success", "task_id": task_id, "phase": request.phase}
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.patch("/goals/{goal_id}/status")
+async def update_goal_status(
+    vault: str,
+    goal_id: str,
+    request: UpdateStatusRequest,
+) -> dict[str, str]:
+    """Update goal status in frontmatter (drag-and-drop on the Goals view).
+
+    Args:
+        vault: Vault name
+        goal_id: Goal ID (filename without .md)
+        request: Status update request with the new status value
+
+    Returns:
+        Success payload with goal_id + new status
+
+    Raises:
+        HTTPException: If goal not found or update fails
+    """
+    # Reject goal IDs starting with `-` to prevent argument injection into
+    # vault-cli (e.g. `--help`, `--upload=…`). Separate-arg subprocess form
+    # already prevents shell injection; this guards the vault-cli arg parser.
+    if goal_id.startswith("-"):
+        raise HTTPException(status_code=400, detail="goal_id must not start with '-'")
+
+    try:
+        vault_config = get_vault_config(vault)
+
+        proc = await asyncio.create_subprocess_exec(
+            vault_config.vault_cli_path,
+            "goal",
+            "set",
+            goal_id,
+            "status",
+            request.status,
+            "--vault",
+            vault_config.name.lower(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        # 10s timeout — vault-cli `goal set` is a single-file frontmatter edit;
+        # anything beyond this is a hang we want to surface as HTTP 504.
+        try:
+            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except TimeoutError as e:
+            with suppress(ProcessLookupError):
+                proc.kill()
+            raise HTTPException(
+                status_code=504, detail="vault-cli goal set timed out after 10s"
+            ) from e
+
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=stderr.decode())
+
+        if _connection_manager:
+            await _connection_manager.broadcast(
+                {"type": "goal_updated", "task_id": goal_id, "item_kind": "goal", "vault": vault}
+            )
+
+        return {"status": "success", "goal_id": goal_id, "new_status": request.status}
     except HTTPException:
         raise
     except FileNotFoundError as e:
