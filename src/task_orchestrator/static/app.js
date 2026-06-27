@@ -12,6 +12,7 @@ const ALL_STATUSES = ['next', 'in_progress', 'backlog', 'completed', 'hold', 'ab
 let tasksCache = {}; // Map of task ID -> task data
 let goalsCache = {}; // Map of goal ID -> goal data (mirrors tasksCache)
 let currentView = 'tasks'; // 'tasks' | 'goals' — synced to ?view= URL param, default 'tasks'
+let currentGroupBy = 'phase'; // 'phase' | 'status' — synced to ?groupBy= URL param, default 'phase'
 let ws = null; // WebSocket connection
 let startingTasks = new Set(); // Track tasks currently being started
 
@@ -45,17 +46,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (h2) h2.textContent = 'Execution';
     }
     parseURLParams();
+    renderColumnHeaders();  // builds the column DOM based on currentGroupBy + currentView
     loadVaults();
     setupEventListeners();
     connectWebSocket();
     startPolling();
 });
 
-// Fallback polling in case WebSocket misses updates
+// Fallback polling in case WebSocket misses updates.
+// Routes through loadCurrentView() so the periodic poll does NOT clobber
+// the Goals view with task cards when the operator is on ?view=goals
+// (spec 014 AC#1 — periodic poll is view-aware).
 function startPolling() {
     setInterval(() => {
-        console.log('Polling for task updates...');
-        loadTasks();
+        console.log('Polling for updates...');
+        loadCurrentView();
     }, POLL_INTERVAL_MS);
 }
 
@@ -92,6 +97,16 @@ function parseURLParams() {
     } else {
         currentView = 'tasks';
     }
+
+    // Parse groupBy parameter — single string, not a list
+    const groupByParam = params.get('groupBy');
+    if (groupByParam === 'phase' || groupByParam === 'status') {
+        currentGroupBy = groupByParam;
+    } else {
+        // Kind-aware default: tasks→phase, goals→status. The default
+        // only applies when the URL doesn't specify groupBy=.
+        currentGroupBy = currentView === 'goals' ? 'status' : 'phase';
+    }
 }
 
 function setupEventListeners() {
@@ -110,12 +125,21 @@ function setupEventListeners() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeAssigneeDropdown();
     });
-    document.getElementById('refresh-btn').addEventListener('click', loadTasks);
+    document.getElementById('refresh-btn').addEventListener('click', loadCurrentView);
     document.getElementById('copy-btn').addEventListener('click', copyCommand);
     document.getElementById('close-btn').addEventListener('click', closeModal);
     setupUpcomingWindow();
     setupModalBackdropClose();
     setupDragAndDrop();
+
+    // groupBy selector (Phase / Status)
+    const groupBySelect = document.getElementById('groupby-select');
+    if (groupBySelect) {
+        groupBySelect.addEventListener('change', (e) => {
+            setGroupBy(e.target.value);
+        });
+    }
+    updateGroupBySelector();
 
     // View toggle: Tasks / Goals
     const viewToggle = document.querySelector('.view-toggle');
@@ -146,7 +170,7 @@ function setupUpcomingWindow() {
         if (Number.isFinite(next) && next >= 0 && next <= 168) {
             upcomingHours = next;
             localStorage.setItem('upcomingHours', String(next));
-            loadTasks();
+            loadCurrentView();
         }
     });
 }
@@ -267,7 +291,7 @@ function handleAllStatusCheckbox() {
 
     updateStatusLabel();
     updateURL();
-    loadTasks();
+    loadCurrentView();
 }
 
 function handleStatusCheckboxChange(e) {
@@ -288,7 +312,7 @@ function handleStatusCheckboxChange(e) {
 
     updateStatusLabel();
     updateURL();
-    loadTasks();
+    loadCurrentView();
 }
 
 function updateStatusLabel() {
@@ -412,8 +436,8 @@ function handleAllAssigneeCheckbox(e) {
     currentAssignees = [];
     updateAssigneeLabel();
     updateURL();
-    loadTasks();
-    // loadTasks will re-render the dropdown; no need to do it here.
+    loadCurrentView();
+    // loadCurrentView will re-render the dropdown; no need to do it here.
 }
 
 function handleAssigneeCheckboxChange(e) {
@@ -429,7 +453,7 @@ function handleAssigneeCheckboxChange(e) {
 
     updateAssigneeLabel();
     updateURL();
-    loadTasks();
+    loadCurrentView();
 }
 
 function updateAssigneeLabel() {
@@ -529,7 +553,7 @@ async function loadVaults() {
                 updateVaultLabel();
                 updateURL();
                 loadAssignees();
-                loadTasks();
+                loadCurrentView();
             });
             dropdown.appendChild(item);
         });
@@ -606,7 +630,7 @@ function handleAllVaultCheckbox() {
     updateVaultLabel();
     updateURL();
     loadAssignees();  // refresh option set for the newly selected vault(s)
-    loadTasks();
+    loadCurrentView();
 }
 
 function handleVaultCheckboxChange(e) {
@@ -639,7 +663,7 @@ function handleVaultCheckboxChange(e) {
     updateVaultLabel();
     updateURL();
     loadAssignees();
-    loadTasks();
+    loadCurrentView();
 }
 
 function saveVaultSelection() {
@@ -679,8 +703,9 @@ function filterByAssignee(assignee) {
     // Update URL
     updateURL();
 
-    // Reload tasks
-    loadTasks();
+    // Reload the active view (so the operator on Goals does not get clobbered
+    // by a tasks re-fetch).
+    loadCurrentView();
 }
 
 async function assignToMe(taskId, vault) {
@@ -695,7 +720,7 @@ async function assignToMe(taskId, vault) {
             showToast(detail, true);
             return;
         }
-        await loadTasks();
+        await loadCurrentView();
     } catch (err) {
         console.error('Assign to me network error:', err);
         showToast(err.message || 'Network error — see console.', true);
@@ -726,6 +751,9 @@ function updateURL() {
 
     // Add view parameter — always emit explicitly (so reload lands in the same view)
     params.set('view', currentView);
+
+    // Add groupBy parameter — always emit explicitly (so reload lands in the same grouping)
+    params.set('groupBy', currentGroupBy);
 
     // Update URL without reload
     const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -778,8 +806,10 @@ async function handleDrop(e) {
             throw new Error(await parseErrorResponse(response));
         }
 
-        // Reload tasks to reflect changes
-        await loadTasks();
+        // Reload the active view to reflect changes. Drag-drop is only
+        // triggered from task cards (Tasks view), so this resolves to
+        // loadTasks() — but using loadCurrentView() is safer / idempotent.
+        await loadCurrentView();
     } catch (error) {
         console.error('Failed to update task phase:', error);
         showToast(error.message, true);
@@ -852,11 +882,21 @@ async function loadTasks() {
         // Populate cards: active first, then upcoming per lane, recently-completed always at bottom of done
         const validPhases = ['todo', 'planning', 'execution', 'ai_review', 'human_review', 'done'];
         [...activeTasks, ...upcomingTasks].forEach(task => {
-            // One-way display alias: on-disk in_progress renders in the execution column.
-            const displayPhase = task.phase === 'in_progress' ? 'execution' : task.phase;
-            // Default to todo if phase is missing or invalid
-            const phase = displayPhase && validPhases.includes(displayPhase) ? displayPhase : 'todo';
-            const container = document.getElementById(`cards-${phase}`);
+            let containerId;
+            if (currentGroupBy === 'status') {
+                // Status-mode for tasks: status is the column discriminator.
+                // Tasks without a matching status land in the first column
+                // (in_progress) as a fallback — tasks should always have a
+                // status, but defensiveness costs nothing here.
+                const taskStatus = task.status || 'in_progress';
+                containerId = `cards-${taskStatus}`;
+            } else {
+                // phase-mode: existing behavior — in_progress → execution alias.
+                const displayPhase = task.phase === 'in_progress' ? 'execution' : task.phase;
+                const phase = displayPhase && validPhases.includes(displayPhase) ? displayPhase : 'todo';
+                containerId = `cards-${phase}`;
+            }
+            const container = document.getElementById(containerId);
             if (container) {
                 const card = createTaskCard(task);
                 container.appendChild(card);
@@ -905,28 +945,29 @@ async function loadGoals() {
             goalsCache[goal.id] = goal;
         });
 
-        // Goal status -> column id (same columns as tasks)
-        //   in_progress -> execution (alias), next -> todo,
-        //   backlog -> planning, completed -> done,
-        //   hold -> human_review (read-only "On Hold" view),
-        //   aborted -> done (read-only)
-        const statusToColumn = {
-            'in_progress': 'execution',
-            'next': 'todo',
-            'backlog': 'planning',
-            'completed': 'done',
-            'hold': 'human_review',
-            'aborted': 'done',
-        };
-        // Clear all card columns
-        ['todo', 'planning', 'execution', 'ai_review', 'human_review', 'done'].forEach(phase => {
-            const container = document.getElementById(`cards-${phase}`);
+        // Clear all cards containers that match the active grouping's columns.
+        const containerIds = currentGroupBy === 'status'
+            ? ['in_progress', 'next', 'backlog', 'completed', 'hold', 'aborted']
+            : ['todo', 'planning', 'execution', 'ai_review', 'human_review', 'done', 'unknown'];
+        containerIds.forEach(id => {
+            const container = document.getElementById(`cards-${id}`);
             if (container) container.innerHTML = '';
         });
 
         goals.forEach(goal => {
-            const columnId = statusToColumn[goal.status] || 'todo';
-            const container = document.getElementById(`cards-${columnId}`);
+            let containerId;
+            if (currentGroupBy === 'status') {
+                // Status-mode for goals: status is the column discriminator
+                // (same as tasks in status-mode). Goals should always have
+                // a status; missing status → 'in_progress' as fallback.
+                const goalStatus = goal.status || 'in_progress';
+                containerId = `cards-${goalStatus}`;
+            } else {
+                // phase-mode for goals: goals don't have a phase field,
+                // so they all land in the "—" column.
+                containerId = 'cards-unknown';
+            }
+            const container = document.getElementById(containerId);
             if (container) {
                 const card = createGoalCard(goal);
                 container.appendChild(card);
@@ -1076,9 +1117,6 @@ function createGoalCard(goal) {
     card.dataset.kind = 'goal';
 
     const { title } = extractJiraIssue(goal.title);
-    const openInObsidian = `<a href="${goal.obsidian_url}" class="open-in-obsidian" title="Open goal in Obsidian">
-        Open in Obsidian →
-    </a>`;
 
     card.innerHTML = `
         <div class="card-content">
@@ -1093,9 +1131,6 @@ function createGoalCard(goal) {
         <div class="card-footer">
             <div class="card-footer-left">
                 ${goal.assignee ? `<span class="assignee-badge">👤 ${escapeHtml(goal.assignee)}</span>` : ''}
-            </div>
-            <div class="card-actions">
-                ${openInObsidian}
             </div>
         </div>
     `;
@@ -1534,7 +1569,7 @@ async function handleMenuAction(taskId, action) {
                 throw new Error(await parseErrorResponse(response));
             }
 
-            await loadTasks();
+            await loadCurrentView();
         } catch (error) {
             console.error('Failed to update task phase:', error);
             showToast(error.message, true);
@@ -1639,7 +1674,7 @@ async function executeSlashCommand(taskId, commandType) {
             } else {
                 const successMessage = commandType === 'defer_task' ? 'Task deferred' : 'Task completed';
                 showToast(successMessage);
-                loadTasks();
+                loadCurrentView();
             }
         } else if (!userDismissed) {
             // Only show session modal if user didn't dismiss loading modal
@@ -1680,8 +1715,8 @@ async function clearTaskSession(taskId) {
             tasksCache[taskId].claude_session_id = null;
         }
 
-        // Reload tasks to update UI
-        await loadTasks();
+        // Reload the active view to update UI
+        await loadCurrentView();
     } catch (error) {
         console.error('Failed to clear session:', error);
         showToast(error.message, true);
@@ -1756,14 +1791,21 @@ function handleTaskUpdate(data) {
         // else: user is on Tasks view, ignore the goal event
     } else {
         // kind === 'task' (or anything else — backwards compat)
+        if (currentView === 'goals') {
+            // Spec 014 AC#3: a task event arriving while on Goals view does
+            // NOT mutate the goals DOM and does NOT trigger any fetch. Return
+            // explicitly so future edits cannot accidentally re-fetch goals
+            // in response to a task event (and vice versa).
+            console.log(`Ignoring task event for ${task_id} — view is goals`);
+            return;
+        }
         if (currentView === 'tasks') {
             if (type === 'deleted') {
                 removeTaskCard(task_id);
             } else {
-                loadTasks();
+                loadCurrentView();
             }
         }
-        // else: user is on Goals view, ignore the task event
     }
 }
 
@@ -1791,8 +1833,104 @@ function setView(newView) {
     if (newView !== 'tasks' && newView !== 'goals') return;
     currentView = newView;
     updateViewToggle();
+    renderColumnHeaders();  // "—" column depends on view
     updateURL();
     loadCurrentView();
+}
+
+function setGroupBy(newGroupBy) {
+    if (newGroupBy !== 'phase' && newGroupBy !== 'status') {
+        // Unknown value → fall back to the kind-default (spec Failure Mode row 3).
+        newGroupBy = currentView === 'goals' ? 'status' : 'phase';
+    }
+    // Always call updateURL() so that ?groupBy=bogus on initial load gets rewritten
+    // to the resolved value (spec Failure Mode row 3). The early-return ONLY skips
+    // the re-render path when the value is genuinely unchanged.
+    const valueChanged = newGroupBy !== currentGroupBy;
+    currentGroupBy = newGroupBy;
+    updateGroupBySelector();
+    updateURL();
+    if (!valueChanged) return;
+    renderColumnHeaders();
+    loadCurrentView();
+}
+
+function updateGroupBySelector() {
+    const select = document.getElementById('groupby-select');
+    if (select) select.value = currentGroupBy;
+}
+
+function renderColumnHeaders() {
+    const board = document.querySelector('.kanban-board');
+    if (!board) return;
+
+    if (currentGroupBy === 'status') {
+        // Show status columns, hide phase columns.
+        board.classList.add('status-mode');
+        // Remove any pre-existing status columns (idempotent).
+        board.querySelectorAll('[data-status]').forEach(el => el.remove());
+        // Insert six status columns at the start of the board (in canonical enum order).
+        // Visible status columns (left → right, time-progression).
+        // Hold + aborted are intentionally hidden — they're rare edge states; the
+        // status filter dropdown still lists them so cards remain reachable via filter.
+        const STATUS_COLUMNS = [
+            { id: 'backlog', label: 'Backlog' },
+            { id: 'next', label: 'Next' },
+            { id: 'in_progress', label: 'In Progress' },
+            { id: 'completed', label: 'Completed' },
+        ];
+        STATUS_COLUMNS.forEach(col => {
+            const div = document.createElement('div');
+            div.className = 'kanban-column';
+            div.dataset.status = col.id;
+            div.innerHTML = `<h2 data-column-header="${col.id}">${col.label}</h2><div class="cards" id="cards-${col.id}"></div>`;
+            board.appendChild(div);
+        });
+        // Add the "—" (unknown) column ONLY for goals view under status mode
+        // — no, actually under status mode EVERY goal has a status, so no
+        // "—" column. Reserved for the phase-on-goals fallback below.
+    } else {
+        // phase mode: hide status columns, show phase columns
+        board.classList.remove('status-mode');
+        board.querySelectorAll('[data-status]').forEach(el => el.remove());
+        // Restore phase column headers from data-phase attribute (in case
+        // they were mutated). The header text comes from a fixed map.
+        const PHASE_HEADERS = {
+            'todo': 'Todo',
+            'planning': 'Planning',
+            'in_progress': 'Execution',
+            'execution': 'Execution',
+            'ai_review': 'AI Review',
+            'human_review': 'Human Review',
+            'done': 'Done',
+        };
+        board.querySelectorAll('.kanban-column[data-phase]').forEach(col => {
+            const phase = col.dataset.phase;
+            const h2 = col.querySelector('h2');
+            if (h2 && PHASE_HEADERS[phase]) {
+                h2.textContent = PHASE_HEADERS[phase];
+                h2.dataset.columnHeader = phase;
+            }
+        });
+
+        // For goals view under phase mode, add the "—" column (only if
+        // any goal might lack a phase). The column exists permanently
+        // under ?view=goals&groupBy=phase; the column is removed under
+        // other combinations.
+        const unknownCol = board.querySelector('.kanban-column[data-phase="unknown"]');
+        if (currentView === 'goals') {
+            if (!unknownCol) {
+                const div = document.createElement('div');
+                div.className = 'kanban-column';
+                div.dataset.phase = 'unknown';
+                div.innerHTML = '<h2 data-column-header="unknown">—</h2><div class="cards" id="cards-unknown"></div>';
+                board.appendChild(div);
+            }
+        } else {
+            // Tasks view: never show the "—" column
+            if (unknownCol) unknownCol.remove();
+        }
+    }
 }
 
 function updateViewToggle() {
