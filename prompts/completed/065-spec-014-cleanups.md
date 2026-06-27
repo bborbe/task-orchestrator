@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [014-goals-view-ux-hardening]
+summary: 'Removed redundant ''Open in Obsidian →'' link from createGoalCard (title <a> is now the only anchor on goal cards) and pinned loadGoals''s lack of goal= append via regression test. loadGoals was already clean — no code edit needed there. CHANGELOG updated with two fix: entries. All 253 tests pass; make precommit exits 0.'
+execution_id: task-orchestrator-goals-view-fixes-exec-065-spec-014-cleanups
+dark-factory-version: v0.187.5
 created: "2026-06-27T12:05:00Z"
 queued: "2026-06-27T12:31:48Z"
+started: "2026-06-27T12:43:03Z"
+completed: "2026-06-27T12:45:06Z"
 branch: dark-factory/goals-view-ux-hardening
 ---
 

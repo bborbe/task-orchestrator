@@ -1117,9 +1117,6 @@ function createGoalCard(goal) {
     card.dataset.kind = 'goal';
 
     const { title } = extractJiraIssue(goal.title);
-    const openInObsidian = `<a href="${goal.obsidian_url}" class="open-in-obsidian" title="Open goal in Obsidian">
-        Open in Obsidian →
-    </a>`;
 
     card.innerHTML = `
         <div class="card-content">
@@ -1134,9 +1131,6 @@ function createGoalCard(goal) {
         <div class="card-footer">
             <div class="card-footer-left">
                 ${goal.assignee ? `<span class="assignee-badge">👤 ${escapeHtml(goal.assignee)}</span>` : ''}
-            </div>
-            <div class="card-actions">
-                ${openInObsidian}
             </div>
         </div>
     `;
