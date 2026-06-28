@@ -2,4 +2,4 @@
 
 from importlib.metadata import version
 
-__version__ = version("task-orchestrator")
+__version__ = version("vault-ui")
