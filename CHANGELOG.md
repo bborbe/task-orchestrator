@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.41.1
 
 - fix(goals): match goal card layout to task cards — Jira badge + assignee badge render side-by-side in `card-footer-left` (was: Jira badge inline with title; assignee alone in footer). Priority meta text now uses `.goal-meta` rule (12px / `#96999e`) matching the assignee-badge visual weight instead of inheriting paragraph-default size. Goal cards with frontmatter `jira: BRO-NNNN` (or BRO-NNNN prefix in title) now render the same 🔖 issue-key link tasks already had — `extractJiraIssue()` destructure was dropping `issueKey` / `issueUrl` on the goal-card path.
 
