@@ -1,4 +1,4 @@
-# Task Orchestrator
+# Vault UI
 
 [![CI](https://github.com/bborbe/vault-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/vault-ui/actions/workflows/ci.yml)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/bborbe/vault-ui)
