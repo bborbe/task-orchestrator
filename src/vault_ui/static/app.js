@@ -724,6 +724,25 @@ async function assignToMe(taskId, vault) {
     }
 }
 
+async function assignGoalToMe(goalId, vault) {
+    try {
+        const response = await fetch(
+            `/api/goals/${encodeURIComponent(goalId)}/assign-to-me?vault=${encodeURIComponent(vault)}`,
+            { method: 'PATCH' }
+        );
+        if (!response.ok) {
+            const detail = await parseErrorResponse(response);
+            console.error(`Assign goal to me failed: ${response.status} ${detail}`);
+            showToast(detail, true);
+            return;
+        }
+        await loadCurrentView();
+    } catch (err) {
+        console.error('Assign goal to me network error:', err);
+        showToast(err.message || 'Network error — see console.', true);
+    }
+}
+
 function updateURL() {
     const params = new URLSearchParams();
 
@@ -1166,7 +1185,9 @@ function createGoalCard(goal) {
         <div class="card-footer">
             <div class="card-footer-left">
                 ${jiraBadge}
-                ${goal.assignee ? `<span class="assignee-badge"><span class="assignee-icon">👤</span><span>${escapeHtml(goal.assignee)}</span></span>` : ''}
+                ${goal.assignee
+                    ? `<span class="assignee-badge"><span class="assignee-icon">👤</span><span>${escapeHtml(goal.assignee)}</span></span>`
+                    : `<a class="assign-to-me-link" onclick="assignGoalToMe('${escapeHtml(goal.id)}', '${escapeHtml(goal.vault)}')" title="Assign this goal to me">+ Assign to me</a>`}
             </div>
         </div>
     `;
